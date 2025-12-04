@@ -24,6 +24,12 @@ namespace GitTfs
                           "(?<repository>\\$.+)?;" +
                           "C(?<changeset>\\d+)" +
                           "\\s*$", RegexOptions.Multiline | RegexOptions.Compiled);
+        
+        // Git notes reference for storing TFS metadata without modifying commit messages
+        public const string TfvcSyncNotesRef = "refs/notes/tfvc-sync";
+        
+        // Config key to enable/disable git notes usage
+        public const string UseGitNotesConfigKey = GitTfsPrefix + ".use-notes";
         // e.g. git-tfs-work-item: 24 associate
         public static readonly Regex TfsWorkItemRegex =
                 new Regex(GitTfsPrefix + "-work-item:" + @"\s*(?<item_id>\d+)(\s*(?<action>associate|resolve))?");
