@@ -122,8 +122,7 @@ namespace GitTfs.Util
 
                 if (data.ContainsKey("changeset"))
                 {
-                    int changesetId;
-                    if (int.TryParse(data["changeset"], out changesetId))
+                    if (int.TryParse(data["changeset"], out int changesetId))
                     {
                         var tfsUrl = data.ContainsKey("tfs_url") ? data["tfs_url"] : null;
                         var tfsPath = data.ContainsKey("tfs_path") ? data["tfs_path"] : null;

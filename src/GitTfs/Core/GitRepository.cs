@@ -105,15 +105,6 @@ namespace GitTfs.Core
             _notesManager.AddNote(commitSha, tfsUrl, tfsRepositoryPath, changesetId);
         }
 
-        /// <summary>
-        /// Checks if git notes should be used instead of commit message metadata.
-        /// </summary>
-        private bool UseGitNotes()
-        {
-            // Default to true - we want git notes enabled by default
-            return GetConfig(GitTfsConstants.UseGitNotesConfigKey, true);
-        }
-
 
 
         public IEnumerable<IGitTfsRemote> ReadAllTfsRemotes()

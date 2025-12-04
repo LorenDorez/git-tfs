@@ -90,11 +90,11 @@ namespace GitTfs.Test.Util
         [Fact]
         public void GetNote_WhenCommitDoesNotExist_ThenReturnsNull()
         {
-            // Arrange
-            var nonExistentSha = "0000000000000000000000000000000000000000";
+            // Arrange - use a constant for non-existent commit SHA
+            const string NonExistentSha = "0000000000000000000000000000000000000000";
 
             // Act
-            var noteInfo = _notesManager.GetNote(nonExistentSha);
+            var noteInfo = _notesManager.GetNote(NonExistentSha);
 
             // Assert
             Assert.Null(noteInfo);
