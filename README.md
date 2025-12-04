@@ -151,6 +151,7 @@ This is the complete list of commands in the master branch on github.
 * [subtree](doc/commands/subtree.md): *manage sparse tfs pathes with git-tfs* - since [0.19](../../releases/tag/v0.19.0)
 * [reset-remote](doc/commands/reset-remote.md): *reset a tfs remote to a previous changeset to fetch again its history* - since [0.19](../../releases/tag/v0.19.0)
 * [checkout](doc/commands/checkout.md): *checkout a commit by a changeset id* - since [0.21](../../releases/tag/v0.21.0)
+* [git notes](doc/git-notes.md): *use git notes to store TFS metadata without modifying commit messages (preserves commit SHAs)* - NEW
 * diagnostics (for git-tfs developers only) - since 0.9
 
 * [config file](doc/config.md)

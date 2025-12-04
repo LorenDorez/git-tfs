@@ -28,6 +28,11 @@ There is other git-tfs configuration values for the repository:
   commit messages.
 * `git-tfs.disable-gitignore-support` define if git-tfs should use the
 `.gitignore` file to filter changesets retrieved from TFVC.
+* `git-tfs.use-notes` (default: `true`) controls whether TFS changeset metadata
+  is stored in git notes (at `refs/notes/tfvc-sync`) instead of being embedded
+  in commit messages. When enabled, commit messages remain clean and commit SHAs
+  are preserved during bidirectional sync operations. Set to `false` to use the
+  legacy behavior of embedding metadata in commit messages.
 
 ## Per-TFS remote
 

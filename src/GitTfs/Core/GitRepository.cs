@@ -15,6 +15,7 @@ namespace GitTfs.Core
         private IDictionary<string, IGitTfsRemote> _cachedRemotes;
         private readonly Repository _repository;
         private readonly RemoteConfigConverter _remoteConfigReader;
+        private readonly GitNotesManager _notesManager;
 
         public GitRepository(string gitDir, IContainer container, Globals globals, RemoteConfigConverter remoteConfigReader)
             : base(container)
@@ -24,6 +25,7 @@ namespace GitTfs.Core
             GitDir = gitDir;
             _repository = new Repository(GitDir);
             _remoteConfigReader = remoteConfigReader;
+            _notesManager = new GitNotesManager(_repository);
         }
 
         ~GitRepository()
@@ -94,6 +96,15 @@ namespace GitTfs.Core
         public void SetConfig(string key, string value) => _repository.Config.Set<string>(key, value, ConfigurationLevel.Local);
 
         public void SetConfig(string key, bool value) => SetConfig(key, value.ToString().ToLower());
+
+        /// <summary>
+        /// Adds a git note to a commit with TFS changeset metadata.
+        /// </summary>
+        public void AddTfsNote(string commitSha, string tfsUrl, string tfsRepositoryPath, int changesetId)
+        {
+            _notesManager.AddNote(commitSha, tfsUrl, tfsRepositoryPath, changesetId);
+        }
+
 
 
         public IEnumerable<IGitTfsRemote> ReadAllTfsRemotes()
@@ -364,6 +375,18 @@ namespace GitTfs.Core
 
         private TfsChangesetInfo TryParseChangesetInfo(string gitTfsMetaInfo, string commit)
         {
+            // First, try to get metadata from git notes (new approach)
+            var noteInfo = _notesManager.GetNote(commit);
+            if (noteInfo != null)
+            {
+                var commitInfo = _container.GetInstance<TfsChangesetInfo>();
+                commitInfo.Remote = ReadTfsRemote(noteInfo.TfsUrl, noteInfo.TfsRepositoryPath);
+                commitInfo.ChangesetId = noteInfo.ChangesetId;
+                commitInfo.GitCommit = commit;
+                return commitInfo;
+            }
+
+            // Fall back to parsing commit message (legacy approach for backward compatibility)
             var match = GitTfsConstants.TfsCommitInfoRegex.Match(gitTfsMetaInfo);
             if (match.Success)
             {

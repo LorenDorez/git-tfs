@@ -46,6 +46,7 @@ namespace GitTfs.Core
         string FindCommitHashByChangesetId(int changesetId);
         void CreateTag(string name, string sha, string comment, string Owner, string emailOwner, DateTime creationDate);
         void CreateNote(string sha, string content, string owner, string emailOwner, DateTime creationDate);
+        void AddTfsNote(string commitSha, string tfsUrl, string tfsRepositoryPath, int changesetId);
         void MoveRemote(string oldRemoteName, string newRemoteName);
         void ResetHard(string sha);
         bool IsBare { get; }

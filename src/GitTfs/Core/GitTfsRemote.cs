@@ -812,8 +812,24 @@ namespace GitTfs.Core
 
         private string Commit(LogEntry logEntry)
         {
-            logEntry.Log = BuildCommitMessage(logEntry.Log, logEntry.ChangesetId);
-            return Repository.Commit(logEntry).Sha;
+            // Check if git notes should be used
+            var useGitNotes = Repository.GetConfig(GitTfsConstants.UseGitNotesConfigKey, true);
+            
+            if (!useGitNotes)
+            {
+                // Legacy approach: append git-tfs-id to commit message
+                logEntry.Log = BuildCommitMessage(logEntry.Log, logEntry.ChangesetId);
+            }
+            
+            var commitSha = Repository.Commit(logEntry).Sha;
+            
+            if (useGitNotes)
+            {
+                // New approach: add git note with metadata
+                Repository.AddTfsNote(commitSha, TfsUrl, TfsRepositoryPath, logEntry.ChangesetId);
+            }
+            
+            return commitSha;
         }
 
         private string BuildCommitMessage(string tfsCheckinComment, int changesetId)
