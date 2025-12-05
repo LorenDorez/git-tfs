@@ -15,17 +15,19 @@ namespace GitTfs.Commands
         private readonly TfsWriter _writer;
         private readonly Globals _globals;
         private readonly AuthorsFile _authors;
+        private readonly DiagnosticOutputHelper _diagnosticHelper;
 
         private bool AutoRebase { get; set; }
         private bool ForceCheckin { get; set; }
 
-        public Rcheckin(CheckinOptions checkinOptions, TfsWriter writer, Globals globals, AuthorsFile authors)
+        public Rcheckin(CheckinOptions checkinOptions, TfsWriter writer, Globals globals, AuthorsFile authors, DiagnosticOutputHelper diagnosticHelper)
         {
             _checkinOptions = checkinOptions;
             _checkinOptionsFactory = new CheckinOptionsFactory(globals);
             _writer = writer;
             _globals = globals;
             _authors = authors;
+            _diagnosticHelper = diagnosticHelper;
         }
 
         public OptionSet OptionSet => new OptionSet
@@ -60,6 +62,8 @@ namespace GitTfs.Commands
 
         private int PerformRCheckin(TfsChangesetInfo parentChangeset, string refToCheckin)
         {
+            _diagnosticHelper.OutputDiagnosticInformation("rcheckin", parentChangeset.Remote);
+            
             if (_globals.Repository.IsBare)
                 AutoRebase = false;
 

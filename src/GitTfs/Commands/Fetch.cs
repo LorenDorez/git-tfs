@@ -16,13 +16,15 @@ namespace GitTfs.Commands
         private readonly Globals _globals;
         private readonly ConfigProperties _properties;
         private readonly Labels _labels;
+        private readonly DiagnosticOutputHelper _diagnosticHelper;
 
-        public Fetch(Globals globals, ConfigProperties properties, RemoteOptions remoteOptions, Labels labels)
+        public Fetch(Globals globals, ConfigProperties properties, RemoteOptions remoteOptions, Labels labels, DiagnosticOutputHelper diagnosticHelper)
         {
             _globals = globals;
             _properties = properties;
             _remoteOptions = remoteOptions;
             _labels = labels;
+            _diagnosticHelper = diagnosticHelper;
             upToChangeSet = -1;
             BranchStrategy = BranchStrategy = BranchStrategy.Auto;
         }
@@ -142,6 +144,7 @@ namespace GitTfs.Commands
 
         private void FetchRemote(bool stopOnFailMergeCommit, IGitTfsRemote remote)
         {
+            _diagnosticHelper.OutputDiagnosticInformation("fetch", remote);
             Trace.TraceInformation("Fetching from TFS remote '{0}'...", remote.Id);
             DoFetch(remote, stopOnFailMergeCommit);
             if (_labels != null && FetchLabels)
