@@ -121,14 +121,14 @@ namespace GitTfs.Core
             foreach (var remote in remotes)
             {
                 var remoteName = remote.Name;
-                var pushRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
-                var fetchRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
+                var refspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
 
                 // Check if notes push refspec is already configured
                 var existingPushRefspecs = GetConfig($"remote.{remoteName}.push");
                 if (existingPushRefspecs == null || !existingPushRefspecs.Contains("refs/notes/tfvc-sync"))
                 {
-                    _repository.Config.Set($"remote.{remoteName}.push", pushRefspec, ConfigurationLevel.Local);
+                    // Use git config --add to append the refspec without replacing existing ones
+                    Command("config", "--add", $"remote.{remoteName}.push", refspec);
                     Trace.WriteLine($"Configured automatic git notes push for remote '{remoteName}'");
                 }
 
@@ -136,7 +136,8 @@ namespace GitTfs.Core
                 var existingFetchRefspecs = GetConfig($"remote.{remoteName}.fetch");
                 if (existingFetchRefspecs == null || !existingFetchRefspecs.Contains("refs/notes/tfvc-sync"))
                 {
-                    _repository.Config.Set($"remote.{remoteName}.fetch", fetchRefspec, ConfigurationLevel.Local);
+                    // Use git config --add to append the refspec without replacing existing ones
+                    Command("config", "--add", $"remote.{remoteName}.fetch", refspec);
                     Trace.WriteLine($"Configured automatic git notes fetch for remote '{remoteName}'");
                 }
             }

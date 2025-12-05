@@ -225,5 +225,93 @@ namespace GitTfs.Test.Integration
                 Assert.Empty(changesets);
             }
         }
+
+        [Fact]
+        public void ConfigureNotesSync_WhenNoRemotesExist_ThenDoesNothing()
+        {
+            h.SetupGitRepo("repo", g => { });
+
+            using (var repo = h.Repository("repo"))
+            {
+                var gitRepository = new GitRepository(repo.Info.WorkingDirectory, new Container(), null, new RemoteConfigConverter());
+                
+                // Should not throw when no remotes exist
+                gitRepository.ConfigureNotesSync();
+            }
+        }
+
+        [Fact]
+        public void ConfigureNotesSync_WhenRemoteExists_ThenAddsNotesPushRefspec()
+        {
+            h.SetupGitRepo("repo", g => { });
+
+            using (var repo = h.Repository("repo"))
+            {
+                // Add a remote
+                repo.Network.Remotes.Add("origin", "https://github.com/test/test.git");
+                
+                var gitRepository = new GitRepository(repo.Info.WorkingDirectory, new Container(), null, new RemoteConfigConverter());
+                
+                // Configure notes sync
+                gitRepository.ConfigureNotesSync();
+                
+                // Verify push refspec was added
+                var pushRefspec = gitRepository.GetConfig("remote.origin.push");
+                Assert.Contains("refs/notes/tfvc-sync", pushRefspec);
+            }
+        }
+
+        [Fact]
+        public void ConfigureNotesSync_WhenRemoteExists_ThenAddsNotesFetchRefspec()
+        {
+            h.SetupGitRepo("repo", g => { });
+
+            using (var repo = h.Repository("repo"))
+            {
+                // Add a remote
+                repo.Network.Remotes.Add("origin", "https://github.com/test/test.git");
+                
+                var gitRepository = new GitRepository(repo.Info.WorkingDirectory, new Container(), null, new RemoteConfigConverter());
+                
+                // Configure notes sync
+                gitRepository.ConfigureNotesSync();
+                
+                // Verify fetch refspec was added
+                var fetchRefspec = gitRepository.GetConfig("remote.origin.fetch");
+                Assert.Contains("refs/notes/tfvc-sync", fetchRefspec);
+            }
+        }
+
+        [Fact]
+        public void ConfigureNotesSync_WhenCalledTwice_ThenDoesNotDuplicateRefspecs()
+        {
+            h.SetupGitRepo("repo", g => { });
+
+            using (var repo = h.Repository("repo"))
+            {
+                // Add a remote
+                repo.Network.Remotes.Add("origin", "https://github.com/test/test.git");
+                
+                var gitRepository = new GitRepository(repo.Info.WorkingDirectory, new Container(), null, new RemoteConfigConverter());
+                
+                // Configure notes sync twice
+                gitRepository.ConfigureNotesSync();
+                gitRepository.ConfigureNotesSync();
+                
+                // Verify only one refspec was added (no duplicates)
+                var pushRefspec = gitRepository.GetConfig("remote.origin.push");
+                var fetchRefspec = gitRepository.GetConfig("remote.origin.fetch");
+                
+                Assert.Contains("refs/notes/tfvc-sync", pushRefspec);
+                Assert.Contains("refs/notes/tfvc-sync", fetchRefspec);
+                
+                // Count occurrences - should only appear once
+                int pushCount = System.Text.RegularExpressions.Regex.Matches(pushRefspec, "refs/notes/tfvc-sync").Count;
+                int fetchCount = System.Text.RegularExpressions.Regex.Matches(fetchRefspec, "refs/notes/tfvc-sync").Count;
+                
+                Assert.Equal(1, pushCount);
+                Assert.Equal(1, fetchCount);
+            }
+        }
     }
 }
