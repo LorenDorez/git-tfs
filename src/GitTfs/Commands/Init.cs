@@ -42,6 +42,10 @@ namespace GitTfs.Commands
             CommitTheGitIgnoreFile(_remoteOptions.GitIgnorePath);
             UseTheGitIgnoreFile(_remoteOptions.GitIgnorePath);
             GitTfsInit(tfsUrl, tfsRepositoryPath);
+            
+            // Configure remote to automatically sync git notes
+            _globals.Repository.ConfigureRemoteToSyncNotes();
+            
             return 0;
         }
 

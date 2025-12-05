@@ -127,6 +127,10 @@ namespace GitTfs.Commands
             {
                 FetchRemote(stopOnFailMergeCommit, remote);
             }
+            
+            // Configure remote to automatically sync git notes
+            _globals.Repository.ConfigureRemoteToSyncNotes();
+            
             return 0;
         }
 

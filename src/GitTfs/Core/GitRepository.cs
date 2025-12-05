@@ -105,7 +105,60 @@ namespace GitTfs.Core
             _notesManager.AddNote(commitSha, tfsUrl, tfsRepositoryPath, changesetId);
         }
 
+        /// <summary>
+        /// Configures the specified git remote to automatically push and fetch git notes.
+        /// This ensures TFS changeset metadata stored in git notes is synced with the remote repository.
+        /// </summary>
+        /// <param name="remoteName">The name of the remote to configure (default: "origin")</param>
+        public void ConfigureRemoteToSyncNotes(string remoteName = "origin")
+        {
+            // Check if git notes are enabled
+            var useGitNotes = GetConfig(GitTfsConstants.UseGitNotesConfigKey, true);
+            if (!useGitNotes)
+            {
+                Trace.WriteLine("Git notes are disabled, skipping notes sync configuration");
+                return;
+            }
 
+            // Check if the remote exists
+            var remoteExists = _repository.Network.Remotes[remoteName] != null;
+            if (!remoteExists)
+            {
+                Trace.WriteLine($"Remote '{remoteName}' does not exist, skipping notes sync configuration");
+                return;
+            }
+
+            var notesRefspec = $"+{GitTfsConstants.TfvcSyncNotesRef}:{GitTfsConstants.TfvcSyncNotesRef}";
+            var fetchConfigKey = $"remote.{remoteName}.fetch";
+            var pushConfigKey = $"remote.{remoteName}.push";
+
+            // Check if fetch refspec already exists
+            var existingFetchRefspecs = _repository.Config.GetAll<string>(fetchConfigKey);
+            var fetchRefspecExists = existingFetchRefspecs.Any(rs => rs.Value == notesRefspec);
+
+            if (!fetchRefspecExists)
+            {
+                // Add fetch refspec for notes
+                _repository.Config.Add(fetchConfigKey, notesRefspec, ConfigurationLevel.Local);
+                Trace.WriteLine($"Configured remote '{remoteName}' to fetch git notes: {notesRefspec}");
+            }
+
+            // Check if push refspec already exists
+            var existingPushRefspecs = _repository.Config.GetAll<string>(pushConfigKey);
+            var pushRefspecExists = existingPushRefspecs.Any(rs => rs.Value == notesRefspec);
+
+            if (!pushRefspecExists)
+            {
+                // Add push refspec for notes
+                _repository.Config.Add(pushConfigKey, notesRefspec, ConfigurationLevel.Local);
+                Trace.WriteLine($"Configured remote '{remoteName}' to push git notes: {notesRefspec}");
+            }
+
+            if (fetchRefspecExists && pushRefspecExists)
+            {
+                Trace.WriteLine($"Remote '{remoteName}' is already configured to sync git notes");
+            }
+        }
 
         public IEnumerable<IGitTfsRemote> ReadAllTfsRemotes()
         {
