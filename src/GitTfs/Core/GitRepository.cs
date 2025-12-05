@@ -392,28 +392,44 @@ namespace GitTfs.Core
 
         public IEnumerable<TfsChangesetInfo> GetLastParentTfsCommits(string head)
         {
+            Trace.WriteLine($"[GetLastParentTfsCommits] Called with head: {head}");
             var changesets = new List<TfsChangesetInfo>();
             var commit = _repository.Lookup<Commit>(head);
             if (commit == null)
+            {
+                Trace.WriteLine($"[GetLastParentTfsCommits] No commit found for {head}");
                 return changesets;
+            }
+            Trace.WriteLine($"[GetLastParentTfsCommits] Found commit {commit.Sha}, starting search for TFS commits...");
             FindTfsParentCommits(changesets, commit);
+            Trace.WriteLine($"[GetLastParentTfsCommits] Search complete. Found {changesets.Count} TFS commit(s)");
+            foreach (var cs in changesets)
+            {
+                Trace.WriteLine($"[GetLastParentTfsCommits]   - C{cs.ChangesetId} at {cs.GitCommit}");
+            }
             return changesets;
         }
 
         private void FindTfsParentCommits(List<TfsChangesetInfo> changesets, Commit commit)
         {
+            Trace.WriteLine($"[FindTfsParentCommits] Starting search from commit {commit.Sha}");
             var commitsToFollow = new Stack<Commit>();
             commitsToFollow.Push(commit);
             var alreadyVisitedCommits = new HashSet<string>();
+            int commitsChecked = 0;
+            
             while (commitsToFollow.Any())
             {
                 commit = commitsToFollow.Pop();
+                commitsChecked++;
 
                 alreadyVisitedCommits.Add(commit.Sha);
 
+                Trace.WriteLine($"[FindTfsParentCommits] Checking commit #{commitsChecked}: {commit.Sha.Substring(0, 8)}...");
                 var changesetInfo = TryParseChangesetInfo(commit.Message, commit.Sha);
                 if (changesetInfo == null)
                 {
+                    Trace.WriteLine($"[FindTfsParentCommits]   Not a TFS commit, checking {commit.Parents.Count()} parent(s)");
                     // If commit was not a TFS commit, continue searching all new parents of the commit
                     // Add parents in reverse order to keep topology (main parent should be treated first!)
                     foreach (var parent in commit.Parents.Where(x => !alreadyVisitedCommits.Contains(x.Sha)).Reverse())
@@ -421,10 +437,11 @@ namespace GitTfs.Core
                 }
                 else
                 {
+                    Trace.WriteLine($"[FindTfsParentCommits]   ? Found TFS commit! C{changesetInfo.ChangesetId}");
                     changesets.Add(changesetInfo);
                 }
             }
-            Trace.WriteLine("Commits visited count:" + alreadyVisitedCommits.Count);
+            Trace.WriteLine($"[FindTfsParentCommits] Commits visited count: {alreadyVisitedCommits.Count}");
         }
 
         public TfsChangesetInfo GetTfsChangesetById(string remoteRef, int changesetId)
@@ -457,27 +474,57 @@ namespace GitTfs.Core
 
         private TfsChangesetInfo TryParseChangesetInfo(string gitTfsMetaInfo, string commit)
         {
+            Trace.WriteLine($"[TryParseChangesetInfo] Parsing commit {commit.Substring(0, 8)}...");
+            
             // First, try to get metadata from git notes (new approach)
+            Trace.WriteLine($"[TryParseChangesetInfo] Step 1: Checking for git-notes...");
             var noteInfo = _notesManager.GetNote(commit);
             if (noteInfo != null)
             {
+                Trace.WriteLine($"[TryParseChangesetInfo] ? Found git-note!");
+                Trace.WriteLine($"[TryParseChangesetInfo]   - ChangesetId: C{noteInfo.ChangesetId}");
+                Trace.WriteLine($"[TryParseChangesetInfo]   - TfsUrl: {noteInfo.TfsUrl}");
+                Trace.WriteLine($"[TryParseChangesetInfo]   - TfsPath: {noteInfo.TfsRepositoryPath}");
+                
                 var commitInfo = _container.GetInstance<TfsChangesetInfo>();
                 commitInfo.Remote = ReadTfsRemote(noteInfo.TfsUrl, noteInfo.TfsRepositoryPath);
                 commitInfo.ChangesetId = noteInfo.ChangesetId;
                 commitInfo.GitCommit = commit;
+                Trace.WriteLine($"[TryParseChangesetInfo] ? Successfully parsed from git-notes: C{commitInfo.ChangesetId}");
                 return commitInfo;
+            }
+            else
+            {
+                Trace.WriteLine($"[TryParseChangesetInfo] ? No git-note found for this commit");
             }
 
             // Fall back to parsing commit message (legacy approach for backward compatibility)
+            Trace.WriteLine($"[TryParseChangesetInfo] Step 2: Trying legacy commit message parsing...");
             var match = GitTfsConstants.TfsCommitInfoRegex.Match(gitTfsMetaInfo);
             if (match.Success)
             {
+                Trace.WriteLine($"[TryParseChangesetInfo] ? Found git-tfs-id in commit message");
+                var url = match.Groups["url"].Value;
+                var repo = match.Groups["repository"].Success ? match.Groups["repository"].Value : null;
+                var changesetId = Convert.ToInt32(match.Groups["changeset"].Value);
+                
+                Trace.WriteLine($"[TryParseChangesetInfo]   - ChangesetId: C{changesetId}");
+                Trace.WriteLine($"[TryParseChangesetInfo]   - TfsUrl: {url}");
+                Trace.WriteLine($"[TryParseChangesetInfo]   - TfsPath: {repo ?? "(null)"}");
+                
                 var commitInfo = _container.GetInstance<TfsChangesetInfo>();
-                commitInfo.Remote = ReadTfsRemote(match.Groups["url"].Value, match.Groups["repository"].Success ? match.Groups["repository"].Value : null);
-                commitInfo.ChangesetId = Convert.ToInt32(match.Groups["changeset"].Value);
+                commitInfo.Remote = ReadTfsRemote(url, repo);
+                commitInfo.ChangesetId = changesetId;
                 commitInfo.GitCommit = commit;
+                Trace.WriteLine($"[TryParseChangesetInfo] ? Successfully parsed from commit message: C{commitInfo.ChangesetId}");
                 return commitInfo;
             }
+            else
+            {
+                Trace.WriteLine($"[TryParseChangesetInfo] ? No git-tfs-id found in commit message");
+            }
+            
+            Trace.WriteLine($"[TryParseChangesetInfo] ? Not a TFS commit (no metadata found)");
             return null;
         }
 

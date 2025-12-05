@@ -169,16 +169,30 @@ namespace GitTfs.Core
         {
             if (maxChangesetId == null)
             {
+                Trace.WriteLine($"[InitHistory] Initializing history for remote '{Id}'");
+                Trace.WriteLine($"[InitHistory] RemoteRef: {RemoteRef}");
+                
                 var mostRecentUpdate = Repository.GetLastParentTfsCommits(RemoteRef).FirstOrDefault();
                 if (mostRecentUpdate != null)
                 {
+                    Trace.WriteLine($"[InitHistory] Found most recent TFS commit:");
+                    Trace.WriteLine($"[InitHistory]   - Changeset: C{mostRecentUpdate.ChangesetId}");
+                    Trace.WriteLine($"[InitHistory]   - Git Commit: {mostRecentUpdate.GitCommit}");
+                    Trace.WriteLine($"[InitHistory]   - Remote: {mostRecentUpdate.Remote?.Id}");
+                    
                     MaxCommitHash = mostRecentUpdate.GitCommit;
                     MaxChangesetId = mostRecentUpdate.ChangesetId;
+                    
+                    Trace.WriteLine($"[InitHistory] Set MaxChangesetId to C{MaxChangesetId}");
+                    Trace.WriteLine($"[InitHistory] Set MaxCommitHash to {MaxCommitHash}");
                 }
                 else
                 {
+                    Trace.WriteLine($"[InitHistory] No TFS commits found in history");
+                    
                     // Use 0 as the flag to indicate that no TFS changesets have yet been committed
                     MaxChangesetId = 0;
+                    Trace.WriteLine($"[InitHistory] Set MaxChangesetId to 0 (no TFS changesets yet)");
 
                     // Manage the special case where commits were made to the repository before the
                     // first commit from TFS (e.g. .gitignore was committed during initialization)
@@ -186,8 +200,17 @@ namespace GitTfs.Core
                     if (gitCommit != null)
                     {
                         MaxCommitHash = gitCommit.Sha;
+                        Trace.WriteLine($"[InitHistory] Set MaxCommitHash to {MaxCommitHash} (non-TFS commit)");
+                    }
+                    else
+                    {
+                        Trace.WriteLine($"[InitHistory] No commits found at all for {RemoteRef}");
                     }
                 }
+            }
+            else
+            {
+                Trace.WriteLine($"[InitHistory] Already initialized: MaxChangesetId = C{maxChangesetId}, MaxCommitHash = {maxCommitHash}");
             }
         }
 
@@ -815,18 +838,40 @@ namespace GitTfs.Core
             // Check if git notes should be used
             var useGitNotes = Repository.GetConfig(GitTfsConstants.UseGitNotesConfigKey, true);
             
+            Trace.WriteLine($"[GitNotes] useGitNotes = {useGitNotes}");
+            Trace.WriteLine($"[GitNotes] ChangesetId = {logEntry.ChangesetId}");
+            Trace.WriteLine($"[GitNotes] TfsUrl = {TfsUrl}");
+            Trace.WriteLine($"[GitNotes] TfsRepositoryPath = {TfsRepositoryPath}");
+            
             if (!useGitNotes)
             {
                 // Legacy approach: append git-tfs-id to commit message
+                Trace.WriteLine("[GitNotes] Using legacy commit message approach");
                 logEntry.Log = BuildCommitMessage(logEntry.Log, logEntry.ChangesetId);
+            }
+            else
+            {
+                Trace.WriteLine("[GitNotes] Will add git-note after commit");
             }
             
             var commitSha = Repository.Commit(logEntry).Sha;
+            Trace.WriteLine($"[GitNotes] Created commit: {commitSha}");
             
             if (useGitNotes)
             {
-                // New approach: add git note with metadata
-                Repository.AddTfsNote(commitSha, TfsUrl, TfsRepositoryPath, logEntry.ChangesetId);
+                try
+                {
+                    Trace.WriteLine($"[GitNotes] Adding note to commit {commitSha}");
+                    // New approach: add git note with metadata
+                    Repository.AddTfsNote(commitSha, TfsUrl, TfsRepositoryPath, logEntry.ChangesetId);
+                    Trace.WriteLine($"[GitNotes] Successfully added note for C{logEntry.ChangesetId}");
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[GitNotes] ERROR adding note: {ex.Message}");
+                    Trace.WriteLine($"[GitNotes] Stack trace: {ex.StackTrace}");
+                    throw;
+                }
             }
             
             return commitSha;
