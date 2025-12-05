@@ -255,9 +255,9 @@ namespace GitTfs.Test.Integration
                 // Configure notes sync
                 gitRepository.ConfigureNotesSync();
                 
-                // Verify push refspec was added
-                var pushRefspec = gitRepository.GetConfig("remote.origin.push");
-                Assert.Contains("refs/notes/tfvc-sync", pushRefspec);
+                // Verify push refspec was added - use Command to get all values
+                var pushRefspecs = gitRepository.Command("config", "--get-all", "remote.origin.push");
+                Assert.Contains("refs/notes/tfvc-sync", pushRefspecs);
             }
         }
 
@@ -276,9 +276,9 @@ namespace GitTfs.Test.Integration
                 // Configure notes sync
                 gitRepository.ConfigureNotesSync();
                 
-                // Verify fetch refspec was added
-                var fetchRefspec = gitRepository.GetConfig("remote.origin.fetch");
-                Assert.Contains("refs/notes/tfvc-sync", fetchRefspec);
+                // Verify fetch refspec was added - use Command to get all values
+                var fetchRefspecs = gitRepository.Command("config", "--get-all", "remote.origin.fetch");
+                Assert.Contains("refs/notes/tfvc-sync", fetchRefspecs);
             }
         }
 
@@ -298,16 +298,16 @@ namespace GitTfs.Test.Integration
                 gitRepository.ConfigureNotesSync();
                 gitRepository.ConfigureNotesSync();
                 
-                // Verify only one refspec was added (no duplicates)
-                var pushRefspec = gitRepository.GetConfig("remote.origin.push");
-                var fetchRefspec = gitRepository.GetConfig("remote.origin.fetch");
+                // Verify only one refspec was added (no duplicates) - use Command to get all values
+                var pushRefspecs = gitRepository.Command("config", "--get-all", "remote.origin.push");
+                var fetchRefspecs = gitRepository.Command("config", "--get-all", "remote.origin.fetch");
                 
-                Assert.Contains("refs/notes/tfvc-sync", pushRefspec);
-                Assert.Contains("refs/notes/tfvc-sync", fetchRefspec);
+                Assert.Contains("refs/notes/tfvc-sync", pushRefspecs);
+                Assert.Contains("refs/notes/tfvc-sync", fetchRefspecs);
                 
                 // Count occurrences - should only appear once
-                int pushCount = System.Text.RegularExpressions.Regex.Matches(pushRefspec, "refs/notes/tfvc-sync").Count;
-                int fetchCount = System.Text.RegularExpressions.Regex.Matches(fetchRefspec, "refs/notes/tfvc-sync").Count;
+                int pushCount = System.Text.RegularExpressions.Regex.Matches(pushRefspecs, "refs/notes/tfvc-sync").Count;
+                int fetchCount = System.Text.RegularExpressions.Regex.Matches(fetchRefspecs, "refs/notes/tfvc-sync").Count;
                 
                 Assert.Equal(1, pushCount);
                 Assert.Equal(1, fetchCount);
