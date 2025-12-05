@@ -47,6 +47,7 @@ namespace GitTfs.Core
         void CreateTag(string name, string sha, string comment, string Owner, string emailOwner, DateTime creationDate);
         void CreateNote(string sha, string content, string owner, string emailOwner, DateTime creationDate);
         void AddTfsNote(string commitSha, string tfsUrl, string tfsRepositoryPath, int changesetId);
+        void ConfigureRemoteToSyncNotes(string remoteName = "origin");
         void MoveRemote(string oldRemoteName, string newRemoteName);
         void ResetHard(string sha);
         bool IsBare { get; }
