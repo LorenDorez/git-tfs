@@ -53,8 +53,8 @@ namespace GitTfs.Test.Core
             _gitRepository.ConfigureRemoteToSyncNotes("origin");
 
             // Assert
-            var fetchRefspecs = _libGit2Repository.Config.GetAll<string>("remote.origin.fetch").ToList();
-            var pushRefspecs = _libGit2Repository.Config.GetAll<string>("remote.origin.push").ToList();
+            var fetchRefspecs = _libGit2Repository.Config.Find("remote.origin.fetch", ConfigurationLevel.Local).ToList();
+            var pushRefspecs = _libGit2Repository.Config.Find("remote.origin.push", ConfigurationLevel.Local).ToList();
 
             Assert.Contains(fetchRefspecs, rs => rs.Value == "+refs/notes/tfvc-sync:refs/notes/tfvc-sync");
             Assert.Contains(pushRefspecs, rs => rs.Value == "+refs/notes/tfvc-sync:refs/notes/tfvc-sync");
@@ -68,8 +68,8 @@ namespace GitTfs.Test.Core
             _gitRepository.ConfigureRemoteToSyncNotes("origin");
 
             // Assert
-            var fetchRefspecs = _libGit2Repository.Config.GetAll<string>("remote.origin.fetch").ToList();
-            var pushRefspecs = _libGit2Repository.Config.GetAll<string>("remote.origin.push").ToList();
+            var fetchRefspecs = _libGit2Repository.Config.Find("remote.origin.fetch", ConfigurationLevel.Local).ToList();
+            var pushRefspecs = _libGit2Repository.Config.Find("remote.origin.push", ConfigurationLevel.Local).ToList();
 
             var notesRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
             var fetchCount = fetchRefspecs.Count(rs => rs.Value == notesRefspec);
@@ -86,8 +86,8 @@ namespace GitTfs.Test.Core
             _gitRepository.ConfigureRemoteToSyncNotes("nonexistent");
 
             // Assert
-            var fetchRefspecs = _libGit2Repository.Config.GetAll<string>("remote.nonexistent.fetch").ToList();
-            var pushRefspecs = _libGit2Repository.Config.GetAll<string>("remote.nonexistent.push").ToList();
+            var fetchRefspecs = _libGit2Repository.Config.Find("remote.nonexistent.fetch", ConfigurationLevel.Local).ToList();
+            var pushRefspecs = _libGit2Repository.Config.Find("remote.nonexistent.push", ConfigurationLevel.Local).ToList();
 
             Assert.Empty(fetchRefspecs);
             Assert.Empty(pushRefspecs);
@@ -103,8 +103,8 @@ namespace GitTfs.Test.Core
             _gitRepository.ConfigureRemoteToSyncNotes("origin");
 
             // Assert
-            var fetchRefspecs = _libGit2Repository.Config.GetAll<string>("remote.origin.fetch").ToList();
-            var pushRefspecs = _libGit2Repository.Config.GetAll<string>("remote.origin.push").ToList();
+            var fetchRefspecs = _libGit2Repository.Config.Find("remote.origin.fetch", ConfigurationLevel.Local).ToList();
+            var pushRefspecs = _libGit2Repository.Config.Find("remote.origin.push", ConfigurationLevel.Local).ToList();
 
             var notesRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
             Assert.DoesNotContain(fetchRefspecs, rs => rs.Value == notesRefspec);

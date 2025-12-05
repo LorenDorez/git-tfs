@@ -1,6 +1,7 @@
 ﻿using GitTfs.Core;
 using GitTfs.Core.TfsInterop;
 
+using LibGit2Sharp;
 using StructureMap;
 
 using Xunit;
@@ -257,7 +258,7 @@ namespace GitTfs.Test.Integration
                 
                 // Verify push refspec was added
                 var config = repo.Config;
-                var pushRefspecs = config.GetAll<string>("remote.origin.push");
+                var pushRefspecs = config.Find("remote.origin.push", ConfigurationLevel.Local);
                 Assert.Contains(pushRefspecs, rs => rs.Value.Contains("refs/notes/tfvc-sync"));
             }
         }
@@ -279,7 +280,7 @@ namespace GitTfs.Test.Integration
                 
                 // Verify fetch refspec was added
                 var config = repo.Config;
-                var fetchRefspecs = config.GetAll<string>("remote.origin.fetch");
+                var fetchRefspecs = config.Find("remote.origin.fetch", ConfigurationLevel.Local);
                 Assert.Contains(fetchRefspecs, rs => rs.Value.Contains("refs/notes/tfvc-sync"));
             }
         }
@@ -302,8 +303,8 @@ namespace GitTfs.Test.Integration
                 
                 // Verify only one refspec was added (no duplicates)
                 var config = repo.Config;
-                var pushRefspecs = config.GetAll<string>("remote.origin.push").ToList();
-                var fetchRefspecs = config.GetAll<string>("remote.origin.fetch").ToList();
+                var pushRefspecs = config.Find("remote.origin.push", ConfigurationLevel.Local).ToList();
+                var fetchRefspecs = config.Find("remote.origin.fetch", ConfigurationLevel.Local).ToList();
                 
                 var notesRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
                 var pushCount = pushRefspecs.Count(rs => rs.Value == notesRefspec);

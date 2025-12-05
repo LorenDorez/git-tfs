@@ -133,7 +133,7 @@ namespace GitTfs.Core
             var pushConfigKey = $"remote.{remoteName}.push";
 
             // Check if fetch refspec already exists
-            var existingFetchRefspecs = _repository.Config.GetAll<string>(fetchConfigKey);
+            var existingFetchRefspecs = _repository.Config.Find(fetchConfigKey, ConfigurationLevel.Local);
             var fetchRefspecExists = existingFetchRefspecs.Any(rs => rs.Value == notesRefspec);
 
             if (!fetchRefspecExists)
@@ -144,7 +144,7 @@ namespace GitTfs.Core
             }
 
             // Check if push refspec already exists
-            var existingPushRefspecs = _repository.Config.GetAll<string>(pushConfigKey);
+            var existingPushRefspecs = _repository.Config.Find(pushConfigKey, ConfigurationLevel.Local);
             var pushRefspecExists = existingPushRefspecs.Any(rs => rs.Value == notesRefspec);
 
             if (!pushRefspecExists)
@@ -177,20 +177,54 @@ namespace GitTfs.Core
         private IGitTfsRemote ReadTfsRemote(string tfsUrl, string tfsRepositoryPath)
         {
             var allRemotes = GetTfsRemotes();
+            
+            // First try: exact match (case-insensitive)
             var matchingRemotes =
                 allRemotes.Values.Where(
                     remote => remote.MatchesUrlAndRepositoryPath(tfsUrl, tfsRepositoryPath));
-            switch (matchingRemotes.Count())
+            
+            if (matchingRemotes.Any())
             {
-                case 0:
-                    return new DerivedGitTfsRemote(tfsUrl, tfsRepositoryPath);
-                case 1:
-                    var remote = matchingRemotes.First();
-                    return remote;
-                default:
+                if (matchingRemotes.Count() > 1)
+                {
                     Trace.WriteLine("More than one remote matched!");
-                    goto case 1;
+                }
+                return matchingRemotes.First();
             }
+            
+            // Second try: if no exact match, try to find a remote with matching repository path only
+            // This handles cases where the TFS URL might have changed but the repository path is the same
+            if (!string.IsNullOrEmpty(tfsRepositoryPath))
+            {
+                var repositoryPathMatch = allRemotes.Values.FirstOrDefault(
+                    remote => !string.IsNullOrEmpty(remote.TfsRepositoryPath) &&
+                             string.Equals(remote.TfsRepositoryPath, tfsRepositoryPath, StringComparison.OrdinalIgnoreCase));
+                
+                if (repositoryPathMatch != null)
+                {
+                    Trace.WriteLine($"No exact URL match found, but found remote '{repositoryPathMatch.Id}' with matching repository path. Using this remote.");
+                    Trace.WriteLine($"  Note URL in git notes:  {tfsUrl}");
+                    Trace.WriteLine($"  Configured remote URL: {repositoryPathMatch.TfsUrl}");
+                    return repositoryPathMatch;
+                }
+            }
+            
+            // Third try: if we only have one TFS remote configured, use it regardless of URL/path match
+            // This is a common scenario where the user has a single TFS remote but URLs might not match exactly
+            if (allRemotes.Count == 1)
+            {
+                var singleRemote = allRemotes.Values.First();
+                Trace.WriteLine($"No matching remote found, but only one TFS remote ('{singleRemote.Id}') is configured. Using it.");
+                Trace.WriteLine($"  URL in git notes:           {tfsUrl}");
+                Trace.WriteLine($"  Repository in git notes:    {tfsRepositoryPath}");
+                Trace.WriteLine($"  Configured remote URL:      {singleRemote.TfsUrl}");
+                Trace.WriteLine($"  Configured remote repository: {singleRemote.TfsRepositoryPath}");
+                return singleRemote;
+            }
+            
+            // No match found, return a derived remote (will require bootstrapping)
+            Trace.WriteLine($"Unable to find a matching TFS remote for URL '{tfsUrl}' and repository '{tfsRepositoryPath}'");
+            return new DerivedGitTfsRemote(tfsUrl, tfsRepositoryPath);
         }
 
         public IEnumerable<string> GetGitRemoteBranches(string gitRemote)
