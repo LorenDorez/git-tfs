@@ -12,8 +12,8 @@ namespace GitTfs.Commands
     public class QuickFetch : Fetch
     {
         private readonly ConfigProperties _properties;
-        public QuickFetch(Globals globals, ConfigProperties properties, RemoteOptions remoteOptions)
-            : base(globals, properties, remoteOptions, null)
+        public QuickFetch(Globals globals, ConfigProperties properties, RemoteOptions remoteOptions, Util.DiagnosticOutputHelper diagnosticHelper)
+            : base(globals, properties, remoteOptions, null, diagnosticHelper)
         {
             _properties = properties;
         }
