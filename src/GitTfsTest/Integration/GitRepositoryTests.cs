@@ -305,9 +305,12 @@ namespace GitTfs.Test.Integration
                 Assert.Contains("refs/notes/tfvc-sync", pushRefspecs);
                 Assert.Contains("refs/notes/tfvc-sync", fetchRefspecs);
                 
-                // Count occurrences - should only appear once
-                int pushCount = System.Text.RegularExpressions.Regex.Matches(pushRefspecs, "refs/notes/tfvc-sync").Count;
-                int fetchCount = System.Text.RegularExpressions.Regex.Matches(fetchRefspecs, "refs/notes/tfvc-sync").Count;
+                // Count occurrences by splitting lines and checking exact matches
+                var pushLines = pushRefspecs.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                var fetchLines = fetchRefspecs.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                
+                int pushCount = pushLines.Count(line => line.Trim() == "+refs/notes/tfvc-sync:refs/notes/tfvc-sync");
+                int fetchCount = fetchLines.Count(line => line.Trim() == "+refs/notes/tfvc-sync:refs/notes/tfvc-sync");
                 
                 Assert.Equal(1, pushCount);
                 Assert.Equal(1, fetchCount);
