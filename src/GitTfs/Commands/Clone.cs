@@ -108,6 +108,9 @@ namespace GitTfs.Commands
                 {
                     _fetch.Run(_fetch.BranchStrategy == BranchStrategy.All);
                     _globals.Repository.GarbageCollect();
+                    
+                    // Configure git notes sync for any configured remotes
+                    _globals.Repository.ConfigureNotesSync();
                 }
 
                 if (_fetch.BranchStrategy == BranchStrategy.All && _initBranch != null)

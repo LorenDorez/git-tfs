@@ -105,7 +105,42 @@ namespace GitTfs.Core
             _notesManager.AddNote(commitSha, tfsUrl, tfsRepositoryPath, changesetId);
         }
 
+        /// <summary>
+        /// Configures automatic push/fetch of git notes for all configured remotes.
+        /// This ensures TFS changeset metadata stored in git notes is synchronized with remote repositories.
+        /// </summary>
+        public void ConfigureNotesSync()
+        {
+            var remotes = _repository.Network.Remotes;
+            if (!remotes.Any())
+            {
+                Trace.WriteLine("No git remotes configured, skipping notes sync configuration");
+                return;
+            }
 
+            foreach (var remote in remotes)
+            {
+                var remoteName = remote.Name;
+                var pushRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
+                var fetchRefspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
+
+                // Check if notes push refspec is already configured
+                var existingPushRefspecs = GetConfig($"remote.{remoteName}.push");
+                if (existingPushRefspecs == null || !existingPushRefspecs.Contains("refs/notes/tfvc-sync"))
+                {
+                    _repository.Config.Set($"remote.{remoteName}.push", pushRefspec, ConfigurationLevel.Local);
+                    Trace.WriteLine($"Configured automatic git notes push for remote '{remoteName}'");
+                }
+
+                // Check if notes fetch refspec is already configured
+                var existingFetchRefspecs = GetConfig($"remote.{remoteName}.fetch");
+                if (existingFetchRefspecs == null || !existingFetchRefspecs.Contains("refs/notes/tfvc-sync"))
+                {
+                    _repository.Config.Set($"remote.{remoteName}.fetch", fetchRefspec, ConfigurationLevel.Local);
+                    Trace.WriteLine($"Configured automatic git notes fetch for remote '{remoteName}'");
+                }
+            }
+        }
 
         public IEnumerable<IGitTfsRemote> ReadAllTfsRemotes()
         {

@@ -311,3 +311,6 @@ __pycache__/
 /src/packages/
 /src/GitTfsTest.dll.xml
 /src/.build
+
+# Mono crash dumps
+mono_crash.mem.*

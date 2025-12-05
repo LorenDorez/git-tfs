@@ -153,6 +153,9 @@ namespace GitTfs.Commands
 
         protected virtual void DoFetch(IGitTfsRemote remote, bool stopOnFailMergeCommit)
         {
+            // Ensure notes sync is configured for any git remotes
+            remote.Repository.ConfigureNotesSync();
+
             if (upToChangeSet != -1 && InitialChangeset.HasValue && InitialChangeset.Value > upToChangeSet)
                 throw new GitTfsException("error: up-to changeset # must not be less than the initial one");
 
