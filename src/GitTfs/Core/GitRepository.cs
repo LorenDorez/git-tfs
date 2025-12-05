@@ -123,33 +123,41 @@ namespace GitTfs.Core
                 var remoteName = remote.Name;
                 var refspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
 
-                // Check if notes push refspec is already configured
-                // Use git config --get-all to check all values, not just the first one
-                var existingPushRefspecs = Command("config", "--get-all", $"remote.{remoteName}.push");
-                bool hasPushRefspec = !string.IsNullOrWhiteSpace(existingPushRefspecs) && 
-                                     existingPushRefspecs.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                                                         .Any(line => line.Trim() == refspec);
-                
-                if (!hasPushRefspec)
+                // Configure push refspec if not already present
+                if (!HasRefspec(remoteName, "push", refspec))
                 {
-                    // Use git config --add to append the refspec without replacing existing ones
                     Command("config", "--add", $"remote.{remoteName}.push", refspec);
                     Trace.WriteLine($"Configured automatic git notes push for remote '{remoteName}'");
                 }
 
-                // Check if notes fetch refspec is already configured
-                // Use git config --get-all to check all values, not just the first one
-                var existingFetchRefspecs = Command("config", "--get-all", $"remote.{remoteName}.fetch");
-                bool hasFetchRefspec = !string.IsNullOrWhiteSpace(existingFetchRefspecs) && 
-                                      existingFetchRefspecs.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                                                           .Any(line => line.Trim() == refspec);
-                
-                if (!hasFetchRefspec)
+                // Configure fetch refspec if not already present
+                if (!HasRefspec(remoteName, "fetch", refspec))
                 {
-                    // Use git config --add to append the refspec without replacing existing ones
                     Command("config", "--add", $"remote.{remoteName}.fetch", refspec);
                     Trace.WriteLine($"Configured automatic git notes fetch for remote '{remoteName}'");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Checks if a specific refspec is already configured for a remote.
+        /// </summary>
+        private bool HasRefspec(string remoteName, string type, string refspec)
+        {
+            try
+            {
+                // Use git config --get-all to check all values, not just the first one
+                var existingRefspecs = Command("config", "--get-all", $"remote.{remoteName}.{type}");
+                
+                // Split by lines and check for exact match after trimming
+                return !string.IsNullOrWhiteSpace(existingRefspecs) &&
+                       existingRefspecs.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                                       .Any(line => line.Trim() == refspec);
+            }
+            catch (GitCommandException)
+            {
+                // Config key doesn't exist, so refspec is not configured
+                return false;
             }
         }
 
