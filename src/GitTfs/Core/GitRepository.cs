@@ -124,8 +124,9 @@ namespace GitTfs.Core
                 var refspec = "+refs/notes/tfvc-sync:refs/notes/tfvc-sync";
 
                 // Check if notes push refspec is already configured
-                var existingPushRefspecs = GetConfig($"remote.{remoteName}.push");
-                if (existingPushRefspecs == null || !existingPushRefspecs.Contains("refs/notes/tfvc-sync"))
+                // Use git config --get-all to check all values, not just the first one
+                var existingPushRefspecs = Command("config", "--get-all", $"remote.{remoteName}.push");
+                if (string.IsNullOrWhiteSpace(existingPushRefspecs) || !existingPushRefspecs.Contains("refs/notes/tfvc-sync"))
                 {
                     // Use git config --add to append the refspec without replacing existing ones
                     Command("config", "--add", $"remote.{remoteName}.push", refspec);
@@ -133,8 +134,9 @@ namespace GitTfs.Core
                 }
 
                 // Check if notes fetch refspec is already configured
-                var existingFetchRefspecs = GetConfig($"remote.{remoteName}.fetch");
-                if (existingFetchRefspecs == null || !existingFetchRefspecs.Contains("refs/notes/tfvc-sync"))
+                // Use git config --get-all to check all values, not just the first one
+                var existingFetchRefspecs = Command("config", "--get-all", $"remote.{remoteName}.fetch");
+                if (string.IsNullOrWhiteSpace(existingFetchRefspecs) || !existingFetchRefspecs.Contains("refs/notes/tfvc-sync"))
                 {
                     // Use git config --add to append the refspec without replacing existing ones
                     Command("config", "--add", $"remote.{remoteName}.fetch", refspec);
