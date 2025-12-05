@@ -153,11 +153,6 @@ namespace GitTfs.Core
                 _repository.Config.Add(pushConfigKey, notesRefspec, ConfigurationLevel.Local);
                 Trace.WriteLine($"Configured remote '{remoteName}' to push git notes: {notesRefspec}");
             }
-
-            if (fetchRefspecExists && pushRefspecExists)
-            {
-                Trace.WriteLine($"Remote '{remoteName}' is already configured to sync git notes");
-            }
         }
 
         public IEnumerable<IGitTfsRemote> ReadAllTfsRemotes()
