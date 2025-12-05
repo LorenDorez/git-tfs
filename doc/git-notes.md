@@ -105,21 +105,27 @@ git log --show-notes=refs/notes/tfvc-sync
 ```
 
 ### Sync Notes with Remote
-Git notes need to be explicitly pushed and fetched:
+
+**Automatic Configuration (Recommended)**
+
+Starting with this version, **git-tfs automatically configures git notes synchronization** when you use `clone`, `quick-clone`, `init`, or `fetch` commands. If you have a git remote configured (e.g., `origin`), git-tfs will automatically add the necessary refspecs to ensure notes are pushed and fetched along with your regular commits.
+
+**No manual configuration is needed in most cases!** After automatic configuration, regular `git push` and `git pull` commands will automatically sync notes.
+
+**Manual Configuration (If Needed)**
+
+If you added a git remote manually after cloning, or want to verify the configuration:
 
 ```bash
-# Push notes
+# Push notes manually
 git push origin refs/notes/tfvc-sync
 
-# Fetch notes
+# Fetch notes manually
 git fetch origin refs/notes/tfvc-sync:refs/notes/tfvc-sync
-```
 
-To automatically push/fetch notes, configure your remote:
-```bash
-# Add to .git/config or run:
-git config remote.origin.push '+refs/notes/tfvc-sync:refs/notes/tfvc-sync'
-git config remote.origin.fetch '+refs/notes/tfvc-sync:refs/notes/tfvc-sync'
+# Or configure automatic sync for your remote:
+git config --add remote.origin.push '+refs/notes/tfvc-sync:refs/notes/tfvc-sync'
+git config --add remote.origin.fetch '+refs/notes/tfvc-sync:refs/notes/tfvc-sync'
 ```
 
 ## Migration from Legacy Approach
@@ -129,6 +135,23 @@ If you have an existing repository with git-tfs-id in commit messages, you don't
 However, if you want to clean up your commit history, future commits will use git notes automatically (if enabled), while old commits will continue to be read from their commit messages.
 
 ## Troubleshooting
+
+### git-tfs fetch can't find latest changeset after quick-clone
+
+This issue occurs when git notes containing TFS changeset metadata weren't synced with your remote repository. After a `quick-clone`, if you push to a remote and then later clone/fetch, git-tfs may report starting from changeset C0.
+
+**Solution:**
+1. Push the notes to your remote:
+   ```bash
+   git push origin refs/notes/tfvc-sync
+   ```
+
+2. On other clones, fetch the notes:
+   ```bash
+   git fetch origin refs/notes/tfvc-sync:refs/notes/tfvc-sync
+   ```
+
+3. For future operations, git-tfs will automatically configure notes sync during `clone`, `fetch`, or `init`.
 
 ### Notes Not Showing Up
 Make sure you've fetched the notes:
