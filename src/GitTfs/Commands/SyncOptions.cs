@@ -6,13 +6,18 @@ namespace GitTfs.Commands
 {
     public class SyncOptions
     {
+        // Constants
+        private const int DefaultLockTimeoutSeconds = 300;  // 5 minutes
+        public const int MaxLockAgeSeconds = 7200;  // 2 hours
+        private const string DefaultLockProvider = "file";
+
         public SyncOptions()
         {
             // Default values
-            LockTimeout = 300; // 5 minutes
-            MaxLockAge = 7200; // 2 hours
+            LockTimeout = DefaultLockTimeoutSeconds;
+            MaxLockAge = MaxLockAgeSeconds;
             AutoMerge = true;
-            LockProvider = "file";
+            LockProvider = DefaultLockProvider;
         }
 
         // Direction options
@@ -97,10 +102,10 @@ namespace GitTfs.Commands
         public void Validate()
         {
             // Validate lock timeout
-            if (LockTimeout > 7200)
+            if (LockTimeout > MaxLockAgeSeconds)
             {
                 throw new GitTfsException(
-                    $"ERROR: --lock-timeout cannot exceed 7200 seconds (2 hours).\n" +
+                    $"ERROR: --lock-timeout cannot exceed {MaxLockAgeSeconds} seconds (2 hours).\n" +
                     $"Reason: Prevents indefinite pipeline hangs and ensures stale lock detection.\n" +
                     $"Specified: {LockTimeout} seconds ({LockTimeout / 3600.0:F1} hours)");
             }

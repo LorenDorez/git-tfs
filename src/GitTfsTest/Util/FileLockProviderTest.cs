@@ -167,7 +167,7 @@ namespace GitTfs.Test.Util
             }
         }
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             // Ensure lock file is cleaned up after each test
             if (File.Exists(_testLockFile))

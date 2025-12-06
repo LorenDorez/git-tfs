@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
+using GitTfs.Commands;
 
 namespace GitTfs.Util
 {
@@ -33,7 +34,7 @@ namespace GitTfs.Util
         {
             var startTime = DateTime.UtcNow;
             var endTime = startTime.Add(timeout);
-            var defaultMaxLockAge = TimeSpan.FromSeconds(7200); // 2 hours
+            var defaultMaxLockAge = TimeSpan.FromSeconds(SyncOptions.MaxLockAgeSeconds);
 
             while (DateTime.UtcNow < endTime)
             {
@@ -77,7 +78,7 @@ namespace GitTfs.Util
                         writer.Write(json);
                     }
 
-                    Trace.WriteLine($"✅ Lock acquired: {_lockFilePath}");
+                    Trace.WriteLine($"[OK] Lock acquired: {_lockFilePath}");
                     return true;
                 }
                 catch (IOException)
@@ -99,7 +100,7 @@ namespace GitTfs.Util
             var finalLockInfo = GetLockInfo(lockName);
             if (finalLockInfo != null)
             {
-                Trace.WriteLine($"❌ Failed to acquire lock after {timeout.TotalSeconds}s");
+                Trace.WriteLine($"[FAIL] Failed to acquire lock after {timeout.TotalSeconds}s");
                 Trace.WriteLine($"   Lock held by: {finalLockInfo.Hostname} (PID {finalLockInfo.Pid})");
                 Trace.WriteLine($"   Acquired at: {finalLockInfo.AcquiredAt:yyyy-MM-dd HH:mm:ss} UTC");
             }
@@ -114,11 +115,11 @@ namespace GitTfs.Util
                 try
                 {
                     File.Delete(_lockFilePath);
-                    Trace.WriteLine($"✅ Lock released: {_lockFilePath}");
+                    Trace.WriteLine($"[OK] Lock released: {_lockFilePath}");
                 }
                 catch (Exception ex)
                 {
-                    Trace.WriteLine($"⚠️ Warning: Failed to release lock: {ex.Message}");
+                    Trace.WriteLine($"[WARN] Warning: Failed to release lock: {ex.Message}");
                 }
             }
         }
@@ -140,7 +141,7 @@ namespace GitTfs.Util
                 try
                 {
                     File.Delete(_lockFilePath);
-                    Trace.WriteLine($"🔓 Force unlocked: {_lockFilePath}");
+                    Trace.WriteLine($"[FORCE] Force unlocked: {_lockFilePath}");
                 }
                 catch (Exception ex)
                 {
