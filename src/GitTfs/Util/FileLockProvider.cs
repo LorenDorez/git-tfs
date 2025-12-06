@@ -33,6 +33,7 @@ namespace GitTfs.Util
         {
             var startTime = DateTime.UtcNow;
             var endTime = startTime.Add(timeout);
+            var defaultMaxLockAge = TimeSpan.FromSeconds(7200); // 2 hours
 
             while (DateTime.UtcNow < endTime)
             {
@@ -43,9 +44,8 @@ namespace GitTfs.Util
                     if (currentLockInfo != null)
                     {
                         var lockAge = DateTime.UtcNow - currentLockInfo.AcquiredAt;
-                        var maxAge = TimeSpan.FromSeconds(7200); // 2 hours default
 
-                        if (lockAge > maxAge)
+                        if (lockAge > defaultMaxLockAge)
                         {
                             Trace.WriteLine($"WARNING: Stale lock detected and removed");
                             Trace.WriteLine($"  Lock age: {lockAge.TotalHours:F1}h");

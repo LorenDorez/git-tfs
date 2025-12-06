@@ -161,7 +161,10 @@ namespace GitTfs.Test.Util
 
             // Cleanup
             provider.ReleaseLock("test");
-            Directory.Delete(lockDir, recursive: true);
+            if (Directory.Exists(lockDir))
+            {
+                Directory.Delete(lockDir, true);
+            }
         }
 
         public void Dispose()

@@ -272,10 +272,22 @@ After enabling, you may need to:
                     return checkinResult;
                 }
             }
-            catch (GitTfsException ex) when (ex.Message.Contains("latest TFS commit should be parent"))
+            catch (GitTfsException ex)
             {
-                // No commits to check in, this is fine
-                Console.WriteLine("ℹ️  No new Git commits to sync to TFVC");
+                // Check if this is the "no commits to checkin" scenario
+                // This happens when there are no new Git commits since last sync
+                if (ex.Message != null && 
+                    (ex.Message.Contains("latest TFS commit should be parent") ||
+                     ex.Message.Contains("No commits to checkin")))
+                {
+                    // This is expected when there are no new commits, not an error
+                    Console.WriteLine("ℹ️  No new Git commits to sync to TFVC");
+                }
+                else
+                {
+                    // Re-throw if it's a different error
+                    throw;
+                }
             }
 
             Console.WriteLine("\n✅ Bidirectional sync completed successfully");
