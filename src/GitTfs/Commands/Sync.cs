@@ -155,6 +155,13 @@ After enabling, you may need to:
         {
             Console.WriteLine("Starting git-tfs sync...");
             
+            // Ensure we're in a valid Git repository
+            if (_globals.Repository == null)
+            {
+                Console.Error.WriteLine("❌ ERROR: Not a git repository. Run 'git tfs init' first or use --init-workspace.");
+                return GitTfsExitCodes.InvalidArguments;
+            }
+            
             if (_options.DryRun)
             {
                 Console.WriteLine("🔍 DRY RUN MODE - No changes will be made");

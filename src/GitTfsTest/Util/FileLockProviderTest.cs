@@ -6,7 +6,7 @@ using Xunit;
 
 namespace GitTfs.Test.Util
 {
-    public class FileLockProviderTest : BaseTest
+    public class FileLockProviderTest : BaseTest, IDisposable
     {
         private readonly string _testLockFile;
 
@@ -164,7 +164,7 @@ namespace GitTfs.Test.Util
             Directory.Delete(lockDir, recursive: true);
         }
 
-        public override void Dispose()
+        public void Dispose()
         {
             // Ensure lock file is cleaned up after each test
             if (File.Exists(_testLockFile))
@@ -178,7 +178,6 @@ namespace GitTfs.Test.Util
                     // Ignore cleanup errors
                 }
             }
-            base.Dispose();
         }
     }
 }
