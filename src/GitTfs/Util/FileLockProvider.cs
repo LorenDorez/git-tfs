@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
-using GitTfs.Commands;
 
 namespace GitTfs.Util
 {
@@ -14,6 +13,7 @@ namespace GitTfs.Util
     public class FileLockProvider : ILockProvider
     {
         private readonly string _lockFilePath;
+        private const int DefaultMaxLockAgeSeconds = 7200; // 2 hours
 
         public FileLockProvider(string lockFilePath)
         {
@@ -34,7 +34,7 @@ namespace GitTfs.Util
         {
             var startTime = DateTime.UtcNow;
             var endTime = startTime.Add(timeout);
-            var defaultMaxLockAge = TimeSpan.FromSeconds(SyncOptions.MaxLockAgeSeconds);
+            var defaultMaxLockAge = TimeSpan.FromSeconds(DefaultMaxLockAgeSeconds);
 
             while (DateTime.UtcNow < endTime)
             {
@@ -42,22 +42,10 @@ namespace GitTfs.Util
                 if (File.Exists(_lockFilePath))
                 {
                     var currentLockInfo = GetLockInfo(lockName);
-                    if (currentLockInfo != null)
+                    if (currentLockInfo != null && IsLockStale(currentLockInfo, defaultMaxLockAge))
                     {
-                        var lockAge = DateTime.UtcNow - currentLockInfo.AcquiredAt;
-
-                        if (lockAge > defaultMaxLockAge)
-                        {
-                            Trace.WriteLine($"WARNING: Stale lock detected and removed");
-                            Trace.WriteLine($"  Lock age: {lockAge.TotalHours:F1}h");
-                            Trace.WriteLine($"  Last held by: {currentLockInfo.Hostname} (PID {currentLockInfo.Pid})");
-                            if (!string.IsNullOrEmpty(currentLockInfo.PipelineId))
-                            {
-                                Trace.WriteLine($"  Pipeline: {currentLockInfo.AcquiredBy} #{currentLockInfo.BuildNumber}");
-                            }
-
-                            ForceUnlock(lockName);
-                        }
+                        LogStaleLockRemoval(currentLockInfo);
+                        ForceUnlock(lockName);
                     }
                 }
 
@@ -164,6 +152,27 @@ namespace GitTfs.Util
             {
                 Trace.WriteLine($"Warning: Failed to read lock info: {ex.Message}");
                 return null;
+            }
+        }
+
+        private bool IsLockStale(LockInfo lockInfo, TimeSpan maxAge)
+        {
+            if (lockInfo == null)
+                return false;
+
+            var lockAge = DateTime.UtcNow - lockInfo.AcquiredAt;
+            return lockAge > maxAge;
+        }
+
+        private void LogStaleLockRemoval(LockInfo lockInfo)
+        {
+            var lockAge = DateTime.UtcNow - lockInfo.AcquiredAt;
+            Trace.WriteLine($"WARNING: Stale lock detected and removed");
+            Trace.WriteLine($"  Lock age: {lockAge.TotalHours:F1}h");
+            Trace.WriteLine($"  Last held by: {lockInfo.Hostname} (PID {lockInfo.Pid})");
+            if (!string.IsNullOrEmpty(lockInfo.PipelineId))
+            {
+                Trace.WriteLine($"  Pipeline: {lockInfo.AcquiredBy} #{lockInfo.BuildNumber}");
             }
         }
     }
