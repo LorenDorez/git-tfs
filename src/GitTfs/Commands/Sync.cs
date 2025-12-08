@@ -300,11 +300,24 @@ After enabling, you may need to:
             Console.WriteLine("🚀 Initializing workspace structure...");
             Console.WriteLine($"   Workspace root: {_options.WorkspaceRoot ?? Directory.GetCurrentDirectory()}");
             Console.WriteLine($"   Workspace name: {_options.WorkspaceName ?? "default"}");
-            Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
-            Console.WriteLine("   Note: Single-branch sync only (no multi-branch support)");
-
+            
             var workspaceRoot = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
-            var workspaceName = _options.WorkspaceName ?? Path.GetFileName(_options.TfvcPath.TrimEnd('/', '\\'));
+            var workspaceName = _options.WorkspaceName ?? Path.GetFileName(_options.TfvcPath?.TrimEnd('/', '\\') ?? "default");
+
+            // Determine if this is a full init (with TFVC details) or just adding a new agent
+            var isFullInit = !string.IsNullOrEmpty(_options.TfvcUrl) && 
+                           !string.IsNullOrEmpty(_options.TfvcPath) && 
+                           !string.IsNullOrEmpty(_options.GitRemoteUrl);
+
+            if (isFullInit)
+            {
+                Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
+                Console.WriteLine("   Note: Single-branch sync only (no multi-branch support)");
+            }
+            else
+            {
+                Console.WriteLine("   Mode: Adding new agent workspace (tools already installed)");
+            }
 
             // Create directory structure - agent workspace folder
             var agentWorkspace = Path.Combine(workspaceRoot, workspaceName);
@@ -313,59 +326,69 @@ After enabling, you may need to:
             var toolsDir = Path.Combine(workspaceRoot, "_tools", "git-tfs");
             var templatesDir = Path.Combine(workspaceRoot, "_tools", "templates");
 
-            Directory.CreateDirectory(toolsDir);
-            Directory.CreateDirectory(templatesDir);
-            Directory.CreateDirectory(repoPath);
-            Directory.CreateDirectory(locksDir);
-
-            Console.WriteLine("✅ Created directory structure");
-
-            // Self-install: Copy git-tfs.exe to persistent location
-            var currentExePath = Assembly.GetExecutingAssembly().Location;
-            var targetExePath = Path.Combine(toolsDir, "git-tfs.exe");
-
-            if (Path.GetFullPath(currentExePath) != Path.GetFullPath(targetExePath))
+            // Only create/install tools if they don't exist or if this is a full init
+            var toolsExist = Directory.Exists(toolsDir) && File.Exists(Path.Combine(toolsDir, "git-tfs.exe"));
+            
+            if (!toolsExist || isFullInit)
             {
-                File.Copy(currentExePath, targetExePath, overwrite: true);
-                Console.WriteLine($"✅ Installed git-tfs.exe to: {targetExePath}");
-            }
-            else
-            {
-                Console.WriteLine($"✅ git-tfs.exe already in persistent location: {targetExePath}");
-            }
+                Directory.CreateDirectory(toolsDir);
+                Directory.CreateDirectory(templatesDir);
+                Console.WriteLine("✅ Created tools directory structure");
 
-            // Check for Git and optionally install
-            var gitInstaller = new GitInstaller(Path.Combine(workspaceRoot, "_tools"));
-            string gitPath;
-            if (!gitInstaller.IsGitAvailable(out gitPath))
-            {
-                Console.WriteLine("\n⚠️  Git not detected on this system");
-                
-                if (_options.AutoInstallGit)
+                // Self-install: Copy git-tfs.exe to persistent location
+                var currentExePath = Assembly.GetExecutingAssembly().Location;
+                var targetExePath = Path.Combine(toolsDir, "git-tfs.exe");
+
+                if (Path.GetFullPath(currentExePath) != Path.GetFullPath(targetExePath))
                 {
-                    if (!gitInstaller.InstallGitPortable())
+                    File.Copy(currentExePath, targetExePath, overwrite: true);
+                    Console.WriteLine($"✅ Installed git-tfs.exe to: {targetExePath}");
+                }
+                else
+                {
+                    Console.WriteLine($"✅ git-tfs.exe already in persistent location: {targetExePath}");
+                }
+
+                // Check for Git and optionally install
+                var gitInstaller = new GitInstaller(Path.Combine(workspaceRoot, "_tools"));
+                string gitPath;
+                if (!gitInstaller.IsGitAvailable(out gitPath))
+                {
+                    Console.WriteLine("\n⚠️  Git not detected on this system");
+                    
+                    if (_options.AutoInstallGit)
                     {
-                        Console.WriteLine("\n❌ Failed to auto-install Git Portable");
-                        Console.WriteLine("   Please install Git manually and try again.");
-                        Console.WriteLine("   Download from: https://git-scm.com/download/win");
+                        if (!gitInstaller.InstallGitPortable())
+                        {
+                            Console.WriteLine("\n❌ Failed to auto-install Git Portable");
+                            Console.WriteLine("   Please install Git manually and try again.");
+                            Console.WriteLine("   Download from: https://git-scm.com/download/win");
+                            return GitTfsExitCodes.InvalidArguments;
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("   Git is required for git-tfs to function.");
+                        Console.WriteLine("   Options:");
+                        Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
+                        Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
+                        Console.WriteLine("     3. Add existing Git to PATH");
                         return GitTfsExitCodes.InvalidArguments;
                     }
                 }
                 else
                 {
-                    Console.WriteLine("   Git is required for git-tfs to function.");
-                    Console.WriteLine("   Options:");
-                    Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
-                    Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
-                    Console.WriteLine("     3. Add existing Git to PATH");
-                    return GitTfsExitCodes.InvalidArguments;
+                    Console.WriteLine($"✅ Git detected: {gitPath}");
                 }
             }
             else
             {
-                Console.WriteLine($"✅ Git detected: {gitPath}");
+                Console.WriteLine($"✅ Tools already installed at: {toolsDir}");
             }
 
+            // Always create the agent workspace directory
+            Directory.CreateDirectory(repoPath);
+            Directory.CreateDirectory(locksDir);
             Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
             Console.WriteLine($"   Repository directory: {repoPath}");
 
@@ -377,17 +400,35 @@ After enabling, you may need to:
             Console.WriteLine($"   Workspace root: {workspaceRoot}");
             Console.WriteLine($"   Agent workspace: {agentWorkspace}");
             Console.WriteLine($"   Repository path: {repoPath}");
-            Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
+            
+            if (isFullInit)
+            {
+                Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
+            }
+            
             Console.WriteLine($"   Tools directory: {Path.Combine(workspaceRoot, "_tools")}");
+            var targetExePath = Path.Combine(toolsDir, "git-tfs.exe");
             Console.WriteLine($"   Persistent git-tfs: {targetExePath}");
             Console.WriteLine($"   Lock directory: {locksDir}");
+            
             Console.WriteLine("\nNext steps:");
-            Console.WriteLine($"  1. cd {repoPath}");
-            Console.WriteLine($"  2. git tfs init {_options.TfvcUrl} {_options.TfvcPath}");
-            Console.WriteLine($"  3. git tfs fetch");
-            Console.WriteLine($"  4. git remote add origin {_options.GitRemoteUrl}");
-            Console.WriteLine($"  5. git push origin main --force");
-            Console.WriteLine($"  6. git tfs sync --from-tfvc --workspace-name={workspaceName}");
+            if (isFullInit)
+            {
+                Console.WriteLine($"  1. cd {repoPath}");
+                Console.WriteLine($"  2. git tfs init {_options.TfvcUrl} {_options.TfvcPath}");
+                Console.WriteLine($"  3. git tfs fetch");
+                Console.WriteLine($"  4. git remote add origin {_options.GitRemoteUrl}");
+                Console.WriteLine($"  5. git push origin main --force");
+                Console.WriteLine($"  6. git tfs sync --workspace-name={workspaceName}");
+                
+                Console.WriteLine("\nTo add another agent workspace:");
+                Console.WriteLine($"  git tfs sync --init-workspace --workspace-name=<NewWorkspaceName>");
+            }
+            else
+            {
+                Console.WriteLine($"  1. Initialize Git repository for this agent workspace");
+                Console.WriteLine($"  2. Use git tfs sync --workspace-name={workspaceName} to sync");
+            }
 
             return GitTfsExitCodes.OK;
         }

@@ -113,13 +113,26 @@ namespace GitTfs.Commands
             }
 
             // Validate init-workspace requirements
+            // If any TFVC/Git params are specified, all must be specified (full init)
+            // If none are specified, this is just adding a new agent workspace
             if (InitWorkspace)
             {
-                if (string.IsNullOrEmpty(TfvcUrl) || string.IsNullOrEmpty(TfvcPath) || string.IsNullOrEmpty(GitRemoteUrl))
+                var hasTfvcUrl = !string.IsNullOrEmpty(TfvcUrl);
+                var hasTfvcPath = !string.IsNullOrEmpty(TfvcPath);
+                var hasGitRemoteUrl = !string.IsNullOrEmpty(GitRemoteUrl);
+
+                // If any are specified, all must be specified
+                if (hasTfvcUrl || hasTfvcPath || hasGitRemoteUrl)
                 {
-                    throw new GitTfsException(
-                        "ERROR: --init-workspace requires --tfvc-url, --tfvc-path, and --git-remote-url");
+                    if (!hasTfvcUrl || !hasTfvcPath || !hasGitRemoteUrl)
+                    {
+                        throw new GitTfsException(
+                            "ERROR: When specifying TFVC/Git parameters with --init-workspace, " +
+                            "all three are required: --tfvc-url, --tfvc-path, and --git-remote-url\n" +
+                            "Or omit all three to just create a new agent workspace using existing tools.");
+                    }
                 }
+                // else: No TFVC/Git params = just adding new agent workspace, which is valid
             }
 
             // Validate direction options

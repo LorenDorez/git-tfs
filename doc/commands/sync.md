@@ -19,9 +19,11 @@ Options:
   
 Workspace Initialization:
   --init-workspace              Initialize workspace structure and self-install
-  --tfvc-url=VALUE              TFS collection URL (required with --init-workspace)
-  --tfvc-path=VALUE             TFVC repository path (required with --init-workspace)
-  --git-remote-url=VALUE        Git remote URL (required with --init-workspace)
+                                  Full mode: Provide --tfvc-url, --tfvc-path, --git-remote-url for initial setup
+                                  Agent-only mode: Omit TFVC/Git params to add new agent workspace using existing tools
+  --tfvc-url=VALUE              TFS collection URL (optional - for full initialization only)
+  --tfvc-path=VALUE             TFVC repository path (optional - for full initialization only)
+  --git-remote-url=VALUE        Git remote URL (optional - for full initialization only)
   --auto-install-git            Auto-download and install Git Portable if not detected (~45MB download from GitHub)
   
 Locking Options:
@@ -62,13 +64,13 @@ git config git-tfs.use-notes true
 
 ## Examples
 
-### Example 1: Initialize Workspace (Self-Installing)
+### Example 1: Initialize Workspace (Self-Installing) - First Time Setup
 
-This is the recommended first step. The `--init-workspace` flag will:
+This is the recommended first step for initial setup. The `--init-workspace` flag with TFVC/Git parameters will:
 - Create the recommended directory structure
 - Copy git-tfs.exe to a persistent location
-- Set up the workspace for the specified TFVC path
 - Optionally auto-install Git Portable if not detected
+- Set up the first agent workspace for the specified TFVC path
 
 ```powershell
 # Download git-tfs.exe to a temporary location
@@ -76,8 +78,7 @@ $tempDir = $env:AGENT_TEMPDIRECTORY
 Invoke-WebRequest -Uri "https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe" `
   -OutFile "$tempDir\git-tfs.exe"
 
-# Initialize workspace (git-tfs will self-install)
-# Add --auto-install-git to automatically install Git Portable if not detected
+# Initialize workspace with full setup (first time)
 & "$tempDir\git-tfs.exe" sync --init-workspace `
   --workspace-root="C:\TFVC-to-Git-Migration" `
   --workspace-name="MyProject" `
@@ -88,6 +89,21 @@ Invoke-WebRequest -Uri "https://github.com/LorenDorez/git-tfs/releases/latest/do
 
 # Use the persistent git-tfs.exe from now on
 $gitTfs = "C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe"
+```
+
+### Example 1b: Add Additional Agent Workspaces
+
+After initial setup, you can add more agent workspaces without re-downloading tools:
+
+```powershell
+# Add a new agent workspace (reuses existing tools)
+$gitTfs = "C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe"
+
+& $gitTfs sync --init-workspace `
+  --workspace-root="C:\TFVC-to-Git-Migration" `
+  --workspace-name="AnotherProject"
+
+# This creates a new agent workspace without re-downloading git-tfs or Git
 ```
 
 This creates:
