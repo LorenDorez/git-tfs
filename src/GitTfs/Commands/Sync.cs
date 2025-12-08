@@ -55,7 +55,8 @@ namespace GitTfs.Commands
                 {
                     var workspaceRoot = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
                     var workspaceName = _options.WorkspaceName ?? Path.GetFileName(_globals.GitDir ?? Directory.GetCurrentDirectory());
-                    lockFile = Path.Combine(workspaceRoot, "_locks", $"{workspaceName}.lock");
+                    var agentWorkspace = Path.Combine(workspaceRoot, workspaceName);
+                    lockFile = Path.Combine(agentWorkspace, "locks", $"{workspaceName}.lock");
                 }
 
                 // Acquire lock if needed
@@ -305,15 +306,16 @@ After enabling, you may need to:
             var workspaceRoot = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
             var workspaceName = _options.WorkspaceName ?? Path.GetFileName(_options.TfvcPath.TrimEnd('/', '\\'));
 
-            // Create directory structure
+            // Create directory structure - agent workspace folder
+            var agentWorkspace = Path.Combine(workspaceRoot, workspaceName);
+            var repoPath = Path.Combine(agentWorkspace, "repo");
+            var locksDir = Path.Combine(agentWorkspace, "locks");
             var toolsDir = Path.Combine(workspaceRoot, "_tools", "git-tfs");
             var templatesDir = Path.Combine(workspaceRoot, "_tools", "templates");
-            var agentsDir = Path.Combine(workspaceRoot, "_agents");
-            var locksDir = Path.Combine(workspaceRoot, "_locks");
 
             Directory.CreateDirectory(toolsDir);
             Directory.CreateDirectory(templatesDir);
-            Directory.CreateDirectory(agentsDir);
+            Directory.CreateDirectory(repoPath);
             Directory.CreateDirectory(locksDir);
 
             Console.WriteLine("✅ Created directory structure");
@@ -332,10 +334,8 @@ After enabling, you may need to:
                 Console.WriteLine($"✅ git-tfs.exe already in persistent location: {targetExePath}");
             }
 
-            // Create workspace directory
-            var workspacePath = Path.Combine(agentsDir, workspaceName);
-            Directory.CreateDirectory(workspacePath);
-            Console.WriteLine($"✅ Created workspace directory: {workspacePath}");
+            Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
+            Console.WriteLine($"   Repository directory: {repoPath}");
 
             // Create lock file path
             var lockFilePath = Path.Combine(locksDir, $"{workspaceName}.lock");
@@ -343,14 +343,14 @@ After enabling, you may need to:
 
             Console.WriteLine("\n✅ Workspace initialization complete!");
             Console.WriteLine($"   Workspace root: {workspaceRoot}");
-            Console.WriteLine($"   Workspace name: {workspaceName}");
-            Console.WriteLine($"   Workspace path: {workspacePath}");
+            Console.WriteLine($"   Agent workspace: {agentWorkspace}");
+            Console.WriteLine($"   Repository path: {repoPath}");
             Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
             Console.WriteLine($"   Tools directory: {Path.Combine(workspaceRoot, "_tools")}");
             Console.WriteLine($"   Persistent git-tfs: {targetExePath}");
             Console.WriteLine($"   Lock directory: {locksDir}");
             Console.WriteLine("\nNext steps:");
-            Console.WriteLine($"  1. cd {workspacePath}");
+            Console.WriteLine($"  1. cd {repoPath}");
             Console.WriteLine($"  2. git tfs init {_options.TfvcUrl} {_options.TfvcPath}");
             Console.WriteLine($"  3. git tfs fetch");
             Console.WriteLine($"  4. git remote add origin {_options.GitRemoteUrl}");

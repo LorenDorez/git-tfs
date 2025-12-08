@@ -88,10 +88,10 @@ C:\TFVC-to-Git-Migration\
 ├── _tools\
 │   └── git-tfs\
 │       └── git-tfs.exe         # Persistent installation
-├── _agents\
-│   └── MyProject\              # Workspace directory
-├── _locks\
-│   └── MyProject.lock          # Lock file location
+└── MyProject\                  # Agent workspace
+    ├── repo\                   # Git repository
+    └── locks\                  # Lock files
+        └── MyProject.lock
 ```
 
 ### Example 2: TFVC → Git Sync (Azure DevOps Pipeline)
@@ -102,7 +102,8 @@ After initialization, use the persistent git-tfs.exe in your pipeline:
 $workspaceRoot = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
 $gitTfsExe = "$workspaceRoot\_tools\git-tfs\git-tfs.exe"
-$lockFile = "$workspaceRoot\_locks\$workspaceName.lock"
+$agentWorkspace = "$workspaceRoot\$workspaceName"
+$lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 
 # Sync from TFVC to Git with file-based locking
 & $gitTfsExe sync --from-tfvc `
@@ -113,7 +114,7 @@ $lockFile = "$workspaceRoot\_locks\$workspaceName.lock"
   --lock-timeout=300
 
 # Push to Git remote with notes
-cd "$workspaceRoot\_agents\$workspaceName"
+cd "$workspaceRoot\$workspaceName\repo"
 git push origin main --force-with-lease
 git push origin refs/notes/tfvc-sync:refs/notes/tfvc-sync --force
 ```
@@ -124,7 +125,8 @@ git push origin refs/notes/tfvc-sync:refs/notes/tfvc-sync --force
 $workspaceRoot = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
 $gitTfsExe = "$workspaceRoot\_tools\git-tfs\git-tfs.exe"
-$lockFile = "$workspaceRoot\_locks\$workspaceName.lock"
+$agentWorkspace = "$workspaceRoot\$workspaceName"
+$lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 
 # Sync from Git to TFVC with file-based locking
 & $gitTfsExe sync --to-tfvc `
@@ -141,7 +143,8 @@ $lockFile = "$workspaceRoot\_locks\$workspaceName.lock"
 $workspaceRoot = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
 $gitTfsExe = "$workspaceRoot\_tools\git-tfs\git-tfs.exe"
-$lockFile = "$workspaceRoot\_locks\$workspaceName.lock"
+$agentWorkspace = "$workspaceRoot\$workspaceName"
+$lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 
 # Bidirectional sync (TFVC → Git, then Git → TFVC)
 & $gitTfsExe sync `
@@ -165,7 +168,7 @@ git tfs sync --from-tfvc --dry-run
 If a pipeline crashed and left a stale lock:
 
 ```bash
-git tfs sync --force-unlock --lock-file="C:\TFVC-to-Git-Migration\_locks\MyProject.lock"
+git tfs sync --force-unlock --lock-file="C:\TFVC-to-Git-Migration\MyProject\locks\MyProject.lock"
 ```
 
 ## Locking Mechanism
@@ -242,7 +245,8 @@ To enable git notes:
 **PowerShell Task:**
 ```powershell
 $gitTfsExe = "$(WorkspaceRoot)\_tools\git-tfs\git-tfs.exe"
-$lockFile = "$(WorkspaceRoot)\_locks\$(WorkspaceName).lock"
+$agentWorkspace = "$(WorkspaceRoot)\$(WorkspaceName)"
+$lockFile = "$agentWorkspace\locks\$(WorkspaceName).lock"
 
 & $gitTfsExe sync --from-tfvc `
   --workspace-root="$(WorkspaceRoot)" `
@@ -275,7 +279,8 @@ steps:
     targetType: 'inline'
     script: |
       $gitTfsExe = "$(WorkspaceRoot)\_tools\git-tfs\git-tfs.exe"
-      $lockFile = "$(WorkspaceRoot)\_locks\$(WorkspaceName).lock"
+      $agentWorkspace = "$(WorkspaceRoot)\$(WorkspaceName)"
+      $lockFile = "$agentWorkspace\locks\$(WorkspaceName).lock"
       
       & $gitTfsExe sync --to-tfvc `
         --workspace-root="$(WorkspaceRoot)" `
