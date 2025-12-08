@@ -61,6 +61,99 @@ Enable git notes:
 git config git-tfs.use-notes true
 ```
 
+## Repository Initialization Methods
+
+After creating an agent workspace with `--init-workspace`, you must initialize the Git repository to establish the baseline connection to TFVC. There are three methods available, each suited for different scenarios:
+
+### Method 1: init + fetch (Standard Approach)
+
+The traditional two-step approach gives you full control over the initialization process:
+
+```powershell
+cd _workspace\_agents\MyProject\repo
+git-tfs init <tfvc-url> <tfvc-path>
+git-tfs fetch
+```
+
+**Use when:**
+- You need fine-grained control over the initialization
+- You want to configure additional settings between init and fetch
+- You're setting up a new repository from scratch
+
+**Advantages:**
+- Complete history from TFVC
+- Full control over the process
+- Can add custom git configurations between steps
+
+### Method 2: clone (One-Step Full Clone)
+
+Creates the Git repository and fetches the complete TFVC history in a single command:
+
+```powershell
+cd _workspace\_agents\MyProject
+git-tfs clone <tfvc-url> <tfvc-path> repo
+```
+
+**Use when:**
+- You want a simple one-command setup
+- You need the complete TFVC history
+- The repository is relatively small or you have good network bandwidth
+
+**Advantages:**
+- Simplest command - one step instead of two
+- Complete TFVC history included
+- Creates the repository directory if it doesn't exist
+
+### Method 3: quick-clone (Fast Shallow Clone)
+
+Creates a shallow clone with only recent TFVC history for faster initialization:
+
+```powershell
+cd _workspace\_agents\MyProject
+git-tfs quick-clone <tfvc-url> <tfvc-path> repo
+```
+
+**Use when:**
+- You need fast initialization
+- The full TFVC history is not required
+- The repository is large and full history would take too long
+- You're setting up temporary or test environments
+
+**Advantages:**
+- Fastest initialization method
+- Smaller disk footprint
+- Good for CI/CD pipelines where full history isn't needed
+
+**Trade-offs:**
+- Limited history available
+- Cannot fetch older changesets without re-cloning
+
+### Adding .gitignore Files
+
+All three initialization methods support the `--gitignore-template` option to automatically add a .gitignore file:
+
+```powershell
+# With init
+git-tfs init --gitignore-template=VisualStudio <tfvc-url> <tfvc-path>
+
+# With clone
+git-tfs clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> repo
+
+# With quick-clone
+git-tfs quick-clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> repo
+```
+
+**Available templates:**
+- `VisualStudio` - Ignores Visual Studio build artifacts, bin/, obj/, packages/, etc.
+- Custom path - Provide a path to your own .gitignore file template
+
+**Example with custom template:**
+```powershell
+git-tfs init --gitignore-template="C:\Templates\custom.gitignore" <tfvc-url> <tfvc-path>
+```
+
+The .gitignore file helps prevent committing build artifacts, dependencies, and other files that shouldn't be in version control.
+
 ## Examples
 
 ### Example 1: Initialize Workspace
@@ -101,10 +194,23 @@ cd $rootDir
 # Use the git-tfs.exe from the root directory (where it was extracted)
 $gitTfs = "$rootDir\git-tfs.exe"
 
-# Now manually run the git-tfs commands shown in "Next steps"
+# Now manually initialize the Git repository using one of the methods below
 cd C:\TFVC-to-Git-Migration\_workspace\_agents\MyProject\repo
+
+# Method 1: init + fetch (standard approach)
 & $gitTfs init https://dev.azure.com/MyOrg $/MyProject/Main
 & $gitTfs fetch
+
+# Method 2: clone (creates git repo + fetches history in one command)
+# & $gitTfs clone https://dev.azure.com/MyOrg $/MyProject/Main .
+
+# Method 3: quick-clone (faster, creates shallow clone with recent history)
+# & $gitTfs quick-clone https://dev.azure.com/MyOrg $/MyProject/Main .
+
+# Optional: Add .gitignore file using built-in template
+& $gitTfs init --gitignore-template=VisualStudio  # Or use with clone/quick-clone
+
+# Configure git remote and push
 git remote add origin https://github.com/MyOrg/MyRepo.git
 git push origin main
 ```
@@ -144,10 +250,20 @@ cd $rootDir
 
 .\git-tfs.exe sync --init-workspace --workspace-name="AnotherProject"
 
-# Then manually initialize git-tfs in the new workspace
+# Then manually initialize git-tfs in the new workspace using one of these methods:
 cd _workspace\_agents\AnotherProject\repo
+
+# Option A: init + fetch
 ..\..\..\..\git-tfs.exe init https://dev.azure.com/MyOrg $/AnotherProject/Main
 ..\..\..\..\git-tfs.exe fetch
+
+# Option B: clone (faster, single command)
+# cd _workspace\_agents\AnotherProject
+# ..\..\..\..\git-tfs.exe clone https://dev.azure.com/MyOrg $/AnotherProject/Main repo
+
+# Option C: quick-clone (fastest, shallow history)
+# cd _workspace\_agents\AnotherProject
+# ..\..\..\..\git-tfs.exe quick-clone https://dev.azure.com/MyOrg $/AnotherProject/Main repo
 ```
 
 This creates:
