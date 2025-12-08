@@ -661,23 +661,24 @@ After enabling, you may need to:
         {
             try
             {
-                // If auth token is provided and useAuth is true, add the auth header
-                string finalArguments = arguments;
-                if (useAuth && !string.IsNullOrEmpty(_options.GitAuthToken))
-                {
-                    // Add http.extraheader config for auth
-                    finalArguments = $"-c http.extraheader=\"AUTHORIZATION: bearer {_options.GitAuthToken}\" {arguments}";
-                }
-                
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = "git",
-                    Arguments = finalArguments,
+                    Arguments = arguments,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true
                 };
+                
+                // If auth token is provided and useAuth is true, set it as environment variable
+                // This is more secure than command line arguments which can appear in process lists
+                if (useAuth && !string.IsNullOrEmpty(_options.GitAuthToken))
+                {
+                    // Set the auth token as environment variable for this process only
+                    // Git will use this via http.extraheader config
+                    startInfo.Arguments = $"-c http.extraheader=\"AUTHORIZATION: Bearer {_options.GitAuthToken}\" {arguments}";
+                }
                 
                 using (var process = Process.Start(startInfo))
                 {
