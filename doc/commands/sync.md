@@ -18,8 +18,9 @@ Options:
   --no-auto-merge               Disable automatic merging, always pause on conflicts
   
 Workspace Initialization:
-  --init-workspace              Initialize workspace structure and self-install
-                                  Creates folder structure, installs git-tfs.exe, and optionally Git Portable
+  --init-workspace              Initialize workspace structure
+                                  Creates folder structure and optionally installs Git Portable
+                                  Provides instructions to download git-tfs.exe from GitHub releases
                                   No TFVC/Git parameters needed - just sets up the environment
   --workspace-name=VALUE        Name for the agent workspace (optional, defaults to "default")
   --auto-install-git            Auto-download and install Git Portable if not detected (~45MB download from GitHub)
@@ -62,29 +63,39 @@ git config git-tfs.use-notes true
 
 ## Examples
 
-### Example 1: Initialize Workspace (Self-Installing)
+### Example 1: Initialize Workspace
 
-The `--init-workspace` flag creates the folder structure and installs git-tfs (and optionally Git). It does not run any git-tfs commands - those are run manually in the next steps.
+The `--init-workspace` flag creates the folder structure and optionally installs Git Portable. It does not run any git-tfs commands - those are run manually in the next steps.
 
 ```powershell
-# Download git-tfs.exe to a temporary location
+# Download git-tfs.exe from GitHub releases
 $tempDir = $env:AGENT_TEMPDIRECTORY
 Invoke-WebRequest -Uri "https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe" `
   -OutFile "$tempDir\git-tfs.exe"
 
-# Initialize workspace (creates folder structure only)
+# Initialize workspace (creates folder structure)
 & "$tempDir\git-tfs.exe" sync --init-workspace `
   --workspace-root="C:\TFVC-to-Git-Migration" `
   --workspace-name="MyProject" `
   --auto-install-git
 
+# Follow on-screen instructions to place git-tfs.exe in the tools directory
+# The command will show:
+#   1. Download from: https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe
+#   2. Place the file at: C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe
+
+# Copy or move git-tfs.exe to persistent location
+$gitTfsDir = "C:\TFVC-to-Git-Migration\_tools\git-tfs"
+New-Item -ItemType Directory -Path $gitTfsDir -Force | Out-Null
+Copy-Item "$tempDir\git-tfs.exe" "$gitTfsDir\git-tfs.exe"
+
 # Use the persistent git-tfs.exe from now on
-$gitTfs = "C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe"
+$gitTfs = "$gitTfsDir\git-tfs.exe"
 
 # Now manually run the git-tfs commands shown in "Next steps"
 cd C:\TFVC-to-Git-Migration\MyProject\repo
-git tfs init https://dev.azure.com/MyOrg $/MyProject/Main
-git tfs fetch
+& $gitTfs init https://dev.azure.com/MyOrg $/MyProject/Main
+& $gitTfs fetch
 git remote add origin https://github.com/MyOrg/MyRepo.git
 git push origin main
 ```

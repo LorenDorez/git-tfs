@@ -320,19 +320,13 @@ After enabling, you may need to:
                 Directory.CreateDirectory(templatesDir);
                 Console.WriteLine("✅ Created tools directory structure");
 
-                // Self-install: Copy git-tfs.exe to persistent location
-                var currentExePath = Assembly.GetExecutingAssembly().Location;
+                // Provide instructions to download git-tfs.exe
                 var targetExePath = Path.Combine(toolsDir, "git-tfs.exe");
-
-                if (Path.GetFullPath(currentExePath) != Path.GetFullPath(targetExePath))
-                {
-                    File.Copy(currentExePath, targetExePath, overwrite: true);
-                    Console.WriteLine($"✅ Installed git-tfs.exe to: {targetExePath}");
-                }
-                else
-                {
-                    Console.WriteLine($"✅ git-tfs.exe already in persistent location: {targetExePath}");
-                }
+                Console.WriteLine("\n📥 Please download git-tfs.exe and place it in the tools directory:");
+                Console.WriteLine($"   1. Download from: https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe");
+                Console.WriteLine($"   2. Place the file at: {targetExePath}");
+                Console.WriteLine("\n   Note: Copying the running executable can cause file locking issues on Windows.");
+                Console.WriteLine("         Downloading from GitHub releases is the recommended approach.");
 
                 // Check for Git and optionally install
                 var gitInstaller = new GitInstaller(Path.Combine(workspaceRoot, "_tools"));
@@ -391,12 +385,26 @@ After enabling, you may need to:
             Console.WriteLine($"   Lock directory: {locksDir}");
             
             Console.WriteLine("\nNext steps:");
-            Console.WriteLine($"  1. cd {repoPath}");
-            Console.WriteLine($"  2. git tfs init <tfvc-url> <tfvc-path>");
-            Console.WriteLine($"  3. git tfs fetch");
-            Console.WriteLine($"  4. git remote add origin <git-remote-url>");
-            Console.WriteLine($"  5. git push origin main");
-            Console.WriteLine($"  6. git tfs sync --workspace-name={workspaceName}");
+            if (!toolsExist)
+            {
+                Console.WriteLine($"  1. Download git-tfs.exe from GitHub releases and place at: {targetExePath}");
+                Console.WriteLine($"     URL: https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe");
+                Console.WriteLine($"  2. cd {repoPath}");
+                Console.WriteLine($"  3. git tfs init <tfvc-url> <tfvc-path>");
+                Console.WriteLine($"  4. git tfs fetch");
+                Console.WriteLine($"  5. git remote add origin <git-remote-url>");
+                Console.WriteLine($"  6. git push origin main");
+                Console.WriteLine($"  7. git tfs sync --workspace-name={workspaceName}");
+            }
+            else
+            {
+                Console.WriteLine($"  1. cd {repoPath}");
+                Console.WriteLine($"  2. git tfs init <tfvc-url> <tfvc-path>");
+                Console.WriteLine($"  3. git tfs fetch");
+                Console.WriteLine($"  4. git remote add origin <git-remote-url>");
+                Console.WriteLine($"  5. git push origin main");
+                Console.WriteLine($"  6. git tfs sync --workspace-name={workspaceName}");
+            }
             
             Console.WriteLine("\nTo add another agent workspace:");
             Console.WriteLine($"  git tfs sync --init-workspace --workspace-name=<NewWorkspaceName>");
