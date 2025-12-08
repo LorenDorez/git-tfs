@@ -19,13 +19,19 @@ namespace GitTfs.Commands
         private readonly Globals _globals;
         private readonly Fetch _fetch;
         private readonly Rcheckin _rcheckin;
+        private readonly Clone _clone;
+        private readonly QuickClone _quickClone;
+        private readonly Init _init;
         private readonly SyncOptions _options;
 
-        public Sync(Globals globals, Fetch fetch, Rcheckin rcheckin)
+        public Sync(Globals globals, Fetch fetch, Rcheckin rcheckin, Clone clone, QuickClone quickClone, Init init)
         {
             _globals = globals;
             _fetch = fetch;
             _rcheckin = rcheckin;
+            _clone = clone;
+            _quickClone = quickClone;
+            _init = init;
             _options = new SyncOptions();
         }
 
@@ -297,108 +303,265 @@ After enabling, you may need to:
 
         private int InitializeWorkspace()
         {
-            Console.WriteLine("🚀 Initializing workspace structure...");
-            Console.WriteLine($"   Root directory: {_options.WorkspaceRoot ?? Directory.GetCurrentDirectory()}");
+            Console.WriteLine("🚀 Initializing workspace...");
             
             var rootDir = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
-
+            Console.WriteLine($"   Root directory: {rootDir}");
+            
             // Create directory structure under _workspace subfolder
             var workspaceDir = Path.Combine(rootDir, "_workspace");
             var toolsDir = Path.Combine(workspaceDir, "_tools");
             var agentsDir = Path.Combine(workspaceDir, "_agents");
 
-            // Create base workspace directory structure
-            Directory.CreateDirectory(workspaceDir);
-            Directory.CreateDirectory(toolsDir);
-            Directory.CreateDirectory(agentsDir);
-            Console.WriteLine($"✅ Created workspace directory: {workspaceDir}");
-
-            // Check for Git and optionally install
-            var gitInstaller = new GitInstaller(toolsDir);
-            string gitPath;
-            if (!gitInstaller.IsGitAvailable(out gitPath))
+            // Safeguard 1: Check if base workspace structure already exists
+            bool workspaceExists = Directory.Exists(workspaceDir);
+            bool toolsExist = Directory.Exists(toolsDir);
+            
+            if (workspaceExists && toolsExist)
             {
-                Console.WriteLine("\n⚠️  Git not detected on this system");
-                
-                if (_options.AutoInstallGit)
+                Console.WriteLine($"✅ Workspace structure already exists: {workspaceDir}");
+                Console.WriteLine("   Skipping tools installation (already present)");
+            }
+            else
+            {
+                // Create base workspace directory structure
+                Directory.CreateDirectory(workspaceDir);
+                Directory.CreateDirectory(toolsDir);
+                Directory.CreateDirectory(agentsDir);
+                Console.WriteLine($"✅ Created workspace directory: {workspaceDir}");
+
+                // Check for Git and optionally install (only if tools directory was just created)
+                var gitInstaller = new GitInstaller(toolsDir);
+                string gitPath;
+                if (!gitInstaller.IsGitAvailable(out gitPath))
                 {
-                    if (!gitInstaller.InstallGitPortable())
+                    Console.WriteLine("\n⚠️  Git not detected on this system");
+                    
+                    if (_options.AutoInstallGit)
                     {
-                        Console.WriteLine("\n❌ Failed to auto-install Git Portable");
-                        Console.WriteLine("   Please install Git manually and try again.");
-                        Console.WriteLine("   Download from: https://git-scm.com/download/win");
+                        if (!gitInstaller.InstallGitPortable())
+                        {
+                            Console.WriteLine("\n❌ Failed to auto-install Git Portable");
+                            Console.WriteLine("   Please install Git manually and try again.");
+                            Console.WriteLine("   Download from: https://git-scm.com/download/win");
+                            return GitTfsExitCodes.InvalidArguments;
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("   Git is required for git-tfs to function.");
+                        Console.WriteLine("   Options:");
+                        Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
+                        Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
+                        Console.WriteLine("     3. Add existing Git to PATH");
                         return GitTfsExitCodes.InvalidArguments;
                     }
                 }
                 else
                 {
-                    Console.WriteLine("   Git is required for git-tfs to function.");
-                    Console.WriteLine("   Options:");
-                    Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
-                    Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
-                    Console.WriteLine("     3. Add existing Git to PATH");
-                    return GitTfsExitCodes.InvalidArguments;
+                    Console.WriteLine($"✅ Git detected: {gitPath}");
                 }
             }
-            else
+
+            // Safeguard 2: Handle workspace name - required for agent workspace creation
+            if (string.IsNullOrEmpty(_options.WorkspaceName))
             {
-                Console.WriteLine($"✅ Git detected: {gitPath}");
-            }
-
-            // If workspace name is provided, create the agent workspace
-            if (!string.IsNullOrEmpty(_options.WorkspaceName))
-            {
-                var workspaceName = _options.WorkspaceName;
-                var agentWorkspace = Path.Combine(agentsDir, workspaceName);
-                var repoPath = Path.Combine(agentWorkspace, "repo");
-                var locksDir = Path.Combine(agentWorkspace, "locks");
-
-                Directory.CreateDirectory(repoPath);
-                Directory.CreateDirectory(locksDir);
-                Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
-                Console.WriteLine($"   Repository directory: {repoPath}");
-
-                // Create lock file path
-                var lockFilePath = Path.Combine(locksDir, $"{workspaceName}.lock");
-                Console.WriteLine($"   Lock file location: {lockFilePath}");
-
-                Console.WriteLine("\n✅ Workspace initialization complete!");
+                // No workspace name provided - just create/verify the base structure
+                Console.WriteLine("\n✅ Base workspace structure ready!");
                 Console.WriteLine($"   Root directory: {rootDir}");
                 Console.WriteLine($"   Workspace directory: {workspaceDir}");
-                Console.WriteLine($"   Agent workspace: {agentWorkspace}");
-                Console.WriteLine($"   Repository path: {repoPath}");
-                Console.WriteLine($"   Tools directory: {Path.Combine(workspaceDir, "_tools")}");
-                Console.WriteLine($"   Agents directory: {agentsDir}");
-                Console.WriteLine($"   Lock directory: {locksDir}");
-                
-                Console.WriteLine("\nNext steps:");
-                Console.WriteLine($"  1. cd {repoPath}");
-                Console.WriteLine($"  2. ..\\..\\..\\..\\git-tfs.exe init <tfvc-url> <tfvc-path>");
-                Console.WriteLine($"  3. ..\\..\\..\\..\\git-tfs.exe fetch");
-                Console.WriteLine($"  4. git remote add origin <git-remote-url>");
-                Console.WriteLine($"  5. git push origin main");
-                Console.WriteLine($"  6. cd {rootDir}");
-                Console.WriteLine($"  7. .\\git-tfs.exe sync --workspace-name={workspaceName}");
-                
-                Console.WriteLine("\nTo add another agent workspace:");
-                Console.WriteLine($"  .\\git-tfs.exe sync --init-workspace --workspace-name=<NewWorkspaceName>");
-            }
-            else
-            {
-                // No workspace name provided - just create the base structure
-                Console.WriteLine($"   Workspace name: (none - base structure only)");
-                
-                Console.WriteLine("\n✅ Base workspace initialization complete!");
-                Console.WriteLine($"   Root directory: {rootDir}");
-                Console.WriteLine($"   Workspace directory: {workspaceDir}");
-                Console.WriteLine($"   Tools directory: {Path.Combine(workspaceDir, "_tools")}");
+                Console.WriteLine($"   Tools directory: {toolsDir}");
                 Console.WriteLine($"   Agents directory: {agentsDir}");
                 
                 Console.WriteLine("\nTo create an agent workspace:");
-                Console.WriteLine($"  .\\git-tfs.exe sync --init-workspace --workspace-name=<WorkspaceName>");
+                Console.WriteLine("  # For folder structure only:");
+                Console.WriteLine($"    .\\git-tfs.exe sync --init-workspace --init-only --workspace-name=<WorkspaceName>");
+                Console.WriteLine("\n  # For full setup with clone:");
+                Console.WriteLine($"    .\\git-tfs.exe sync --init-workspace --workspace-name=<WorkspaceName> \\");
+                Console.WriteLine($"      --tfvc-url=<url> --tfvc-path=<path> --git-remote-url=<url>");
+                
+                return GitTfsExitCodes.OK;
             }
 
-            return GitTfsExitCodes.OK;
+            var workspaceName = _options.WorkspaceName;
+            var agentWorkspace = Path.Combine(agentsDir, workspaceName);
+            var repoPath = Path.Combine(agentWorkspace, "repo");
+            var locksDir = Path.Combine(agentWorkspace, "locks");
+
+            // Check if agent workspace already exists
+            bool agentExists = Directory.Exists(agentWorkspace);
+            
+            if (agentExists)
+            {
+                Console.WriteLine($"\n⚠️  Agent workspace already exists: {agentWorkspace}");
+                
+                if (!_options.InitOnly)
+                {
+                    Console.WriteLine("   Cannot perform full initialization - workspace already exists.");
+                    Console.WriteLine("   Use --init-only to add another workspace or choose a different name.");
+                    return GitTfsExitCodes.InvalidArguments;
+                }
+                
+                Console.WriteLine("   Proceeding with --init-only (folder structure verification)");
+            }
+
+            // Create agent workspace directories
+            Directory.CreateDirectory(repoPath);
+            Directory.CreateDirectory(locksDir);
+            
+            if (!agentExists)
+            {
+                Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
+            }
+            
+            Console.WriteLine($"   Repository directory: {repoPath}");
+            Console.WriteLine($"   Lock file location: {Path.Combine(locksDir, $"{workspaceName}.lock")}");
+
+            // Branch: --init-only vs full init
+            if (_options.InitOnly)
+            {
+                // Just create folder structure
+                Console.WriteLine("\n✅ Workspace folder structure initialized (--init-only)!");
+                Console.WriteLine($"   Agent workspace: {agentWorkspace}");
+                Console.WriteLine($"   Repository path: {repoPath}");
+                Console.WriteLine($"   Lock directory: {locksDir}");
+                
+                Console.WriteLine("\nNext steps to initialize the repository:");
+                Console.WriteLine($"  cd {repoPath}");
+                Console.WriteLine($"  ..\\..\\..\\..\\git-tfs.exe clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> .");
+                Console.WriteLine($"  # or use quick-clone for faster initialization");
+                Console.WriteLine($"  ..\\..\\..\\..\\git-tfs.exe quick-clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> .");
+                Console.WriteLine($"  git remote add origin <git-remote-url>");
+                Console.WriteLine($"  git push -u origin main");
+                
+                return GitTfsExitCodes.OK;
+            }
+
+            // Full initialization: clone repository, configure git notes, add remote
+            Console.WriteLine("\n📦 Performing full workspace initialization...");
+            Console.WriteLine($"   TFVC URL: {_options.TfvcUrl}");
+            Console.WriteLine($"   TFVC Path: {_options.TfvcPath}");
+            Console.WriteLine($"   Git Remote: {_options.GitRemoteUrl}");
+            Console.WriteLine($"   Clone method: {(_options.UseQuickClone ? "quick-clone (shallow)" : "clone (full history)")}");
+
+            // Change to the repo directory for clone operation
+            var originalDir = Directory.GetCurrentDirectory();
+            try
+            {
+                // Navigate to parent directory of repo
+                Directory.SetCurrentDirectory(agentWorkspace);
+                
+                // Perform clone or quick-clone
+                Console.WriteLine($"\n📥 Cloning TFVC repository...");
+                int cloneResult;
+                
+                if (_options.UseQuickClone)
+                {
+                    // Set gitignore template if provided
+                    if (!string.IsNullOrEmpty(_options.GitIgnoreTemplate))
+                    {
+                        (_quickClone as Clone).OptionSet.Parse(new[] { $"--gitignore-template={_options.GitIgnoreTemplate}" });
+                    }
+                    
+                    cloneResult = _quickClone.Run(_options.TfvcUrl, _options.TfvcPath, "repo");
+                }
+                else
+                {
+                    // Set gitignore template if provided
+                    if (!string.IsNullOrEmpty(_options.GitIgnoreTemplate))
+                    {
+                        _clone.OptionSet.Parse(new[] { $"--gitignore-template={_options.GitIgnoreTemplate}" });
+                    }
+                    
+                    cloneResult = _clone.Run(_options.TfvcUrl, _options.TfvcPath, "repo");
+                }
+                
+                if (cloneResult != GitTfsExitCodes.OK)
+                {
+                    Console.Error.WriteLine("\n❌ Clone failed");
+                    return cloneResult;
+                }
+                
+                Console.WriteLine("✅ Clone completed successfully");
+                
+                // Navigate into the repo directory
+                Directory.SetCurrentDirectory(repoPath);
+                
+                // Configure git notes (critical for sync)
+                Console.WriteLine("\n⚙️  Configuring git notes for sync...");
+                var configResult = RunGitCommand("config git-tfs.use-notes true");
+                if (configResult != 0)
+                {
+                    Console.Error.WriteLine("❌ Failed to configure git notes");
+                    return GitTfsExitCodes.InvalidArguments;
+                }
+                Console.WriteLine("✅ Git notes configured");
+                
+                // Add git remote
+                Console.WriteLine($"\n🔗 Adding Git remote: {_options.GitRemoteUrl}");
+                var remoteResult = RunGitCommand($"remote add origin {_options.GitRemoteUrl}");
+                if (remoteResult != 0)
+                {
+                    Console.Error.WriteLine("❌ Failed to add Git remote");
+                    return GitTfsExitCodes.InvalidArguments;
+                }
+                Console.WriteLine("✅ Git remote added");
+                
+                // Success!
+                Console.WriteLine("\n" + new string('=', 80));
+                Console.WriteLine("✅ FULL WORKSPACE INITIALIZATION COMPLETE!");
+                Console.WriteLine(new string('=', 80));
+                Console.WriteLine($"   Workspace: {agentWorkspace}");
+                Console.WriteLine($"   Repository: {repoPath}");
+                Console.WriteLine($"   TFVC Source: {_options.TfvcUrl} {_options.TfvcPath}");
+                Console.WriteLine($"   Git Remote: {_options.GitRemoteUrl}");
+                Console.WriteLine($"   Git notes: Enabled");
+                
+                Console.WriteLine("\nNext steps:");
+                Console.WriteLine($"  1. Push to Git: cd {repoPath} && git push -u origin main");
+                Console.WriteLine($"  2. Start sync:  cd {rootDir} && .\\git-tfs.exe sync --workspace-name={workspaceName}");
+                
+                Console.WriteLine("\nTo add another agent workspace:");
+                Console.WriteLine("  # Folder structure only:");
+                Console.WriteLine($"    .\\git-tfs.exe sync --init-workspace --init-only --workspace-name=<Name>");
+                Console.WriteLine("  # Full setup:");
+                Console.WriteLine($"    .\\git-tfs.exe sync --init-workspace --workspace-name=<Name> \\");
+                Console.WriteLine($"      --tfvc-url=<url> --tfvc-path=<path> --git-remote-url=<url>");
+                
+                return GitTfsExitCodes.OK;
+            }
+            finally
+            {
+                // Restore original directory
+                Directory.SetCurrentDirectory(originalDir);
+            }
+        }
+
+        private int RunGitCommand(string arguments)
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                
+                using (var process = Process.Start(startInfo))
+                {
+                    process.WaitForExit();
+                    return process.ExitCode;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to run git command: {ex.Message}");
+                return 1;
+            }
         }
     }
 }

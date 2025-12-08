@@ -30,10 +30,12 @@ namespace GitTfs.Commands
 
         // Workspace initialization
         public bool InitWorkspace { get; set; }
+        public bool InitOnly { get; set; }  // Only create folder structure, no clone
         public string TfvcUrl { get; set; }
         public string TfvcPath { get; set; }
         public string GitRemoteUrl { get; set; }
         public bool AutoInstallGit { get; set; }
+        public bool UseQuickClone { get; set; }  // Use quick-clone instead of clone for faster initialization
 
         // Locking options
         public string LockProvider { get; set; }
@@ -71,11 +73,13 @@ namespace GitTfs.Commands
                 { "no-auto-merge", "Disable automatic merging, always pause on conflicts", v => AutoMerge = v == null },
 
                 // Workspace initialization
-                { "init-workspace", "Initialize workspace structure and self-install", v => InitWorkspace = v != null },
-                { "tfvc-url=", "[Not used] TFS collection URL (kept for backward compatibility)", v => TfvcUrl = v },
-                { "tfvc-path=", "[Not used] TFVC repository path (kept for backward compatibility)", v => TfvcPath = v },
-                { "git-remote-url=", "[Not used] Git remote URL (kept for backward compatibility)", v => GitRemoteUrl = v },
+                { "init-workspace", "Initialize workspace structure (with --init-only: folders only, default: full setup with clone)", v => InitWorkspace = v != null },
+                { "init-only", "Only create workspace folder structure, skip repository clone/setup", v => InitOnly = v != null },
+                { "tfvc-url=", "TFS collection URL (required for full init unless --init-only)", v => TfvcUrl = v },
+                { "tfvc-path=", "TFVC repository path (required for full init unless --init-only)", v => TfvcPath = v },
+                { "git-remote-url=", "Git remote URL (required for full init unless --init-only)", v => GitRemoteUrl = v },
                 { "auto-install-git", "Auto-download and install Git Portable if not detected (~45MB download from GitHub)", v => AutoInstallGit = v != null },
+                { "use-quick-clone", "Use quick-clone (shallow) instead of full clone for faster initialization", v => UseQuickClone = v != null },
 
                 // Locking options
                 { "lock-provider=", "Lock mechanism (currently only 'file' is supported)", v => LockProvider = v },
@@ -112,8 +116,29 @@ namespace GitTfs.Commands
                     $"Specified: {LockTimeout} seconds ({LockTimeout / 3600.0:F1} hours)");
             }
 
-            // No validation needed for init-workspace - it just creates folder structure
-            // TFVC/Git parameters are not required since we don't run actual commands
+            // Validate init-workspace parameters
+            if (InitWorkspace && !InitOnly)
+            {
+                // Full init requires TFVC and Git URLs
+                if (string.IsNullOrEmpty(TfvcUrl))
+                {
+                    throw new GitTfsException(
+                        "ERROR: --tfvc-url is required for full workspace initialization.\n" +
+                        "Use --init-only if you only want to create the folder structure.");
+                }
+                if (string.IsNullOrEmpty(TfvcPath))
+                {
+                    throw new GitTfsException(
+                        "ERROR: --tfvc-path is required for full workspace initialization.\n" +
+                        "Use --init-only if you only want to create the folder structure.");
+                }
+                if (string.IsNullOrEmpty(GitRemoteUrl))
+                {
+                    throw new GitTfsException(
+                        "ERROR: --git-remote-url is required for full workspace initialization.\n" +
+                        "Use --init-only if you only want to create the folder structure.");
+                }
+            }
 
             // Validate direction options
             if (FromTfvc && ToTfvc)
