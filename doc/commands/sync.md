@@ -68,38 +68,41 @@ git config git-tfs.use-notes true
 The `--init-workspace` flag creates the folder structure and optionally installs Git Portable. It does not run any git-tfs commands - those are run manually in the next steps.
 
 ```powershell
-# Download git-tfs ZIP from GitHub releases
-$tempDir = $env:AGENT_TEMPDIRECTORY
-$zipPath = "$tempDir\git-tfs.zip"
+# Download and extract git-tfs ZIP from GitHub releases
+$rootDir = "C:\TFVC-to-Git-Migration"
+New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
+
+$zipPath = "$rootDir\git-tfs.zip"
 Invoke-WebRequest -Uri "https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.zip" `
   -OutFile $zipPath
 
-# Extract git-tfs.exe
-Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
-$tempExe = "$tempDir\git-tfs.exe"
+# Extract to root directory
+Expand-Archive -Path $zipPath -DestinationPath $rootDir -Force
+Remove-Item $zipPath  # Clean up ZIP file
 
-# Initialize workspace (creates folder structure)
-& $tempExe sync --init-workspace `
-  --workspace-root="C:\TFVC-to-Git-Migration" `
+# Initialize workspace (creates _workspace subfolder with all workspace content)
+cd $rootDir
+.\git-tfs.exe sync --init-workspace `
   --workspace-name="MyProject" `
   --auto-install-git
 
-# Follow on-screen instructions to place git-tfs.exe in the tools directory
-# The command will show:
-#   1. Download ZIP from: https://github.com/LorenDorez/git-tfs/releases/latest
-#   2. Extract git-tfs.exe from the ZIP file
-#   3. Place git-tfs.exe at: C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe
+# This creates the following structure:
+#   C:\TFVC-to-Git-Migration\           (root folder)
+#   ├── git-tfs.exe                      (from extracted ZIP - run from here)
+#   ├── GitTfs.dll                       (dependencies from ZIP)
+#   └── _workspace\                      (created by --init-workspace)
+#       ├── _tools\                      (shared tools)
+#       │   └── git\                     (Git Portable auto-installed)
+#       └── _agents\                     (agent workspaces)
+#           └── MyProject\
+#               ├── repo\                (Git repository)
+#               └── locks\               (lock files)
 
-# Copy or move git-tfs.exe to persistent location
-$gitTfsDir = "C:\TFVC-to-Git-Migration\_tools\git-tfs"
-New-Item -ItemType Directory -Path $gitTfsDir -Force | Out-Null
-Copy-Item $tempExe "$gitTfsDir\git-tfs.exe"
-
-# Use the persistent git-tfs.exe from now on
-$gitTfs = "$gitTfsDir\git-tfs.exe"
+# Use the git-tfs.exe from the root directory (where it was extracted)
+$gitTfs = "$rootDir\git-tfs.exe"
 
 # Now manually run the git-tfs commands shown in "Next steps"
-cd C:\TFVC-to-Git-Migration\MyProject\repo
+cd C:\TFVC-to-Git-Migration\_workspace\_agents\MyProject\repo
 & $gitTfs init https://dev.azure.com/MyOrg $/MyProject/Main
 & $gitTfs fetch
 git remote add origin https://github.com/MyOrg/MyRepo.git
@@ -111,54 +114,58 @@ git push origin main
 After initial setup, you can add more agent workspaces. Tools are reused automatically:
 
 ```powershell
-# Add a new agent workspace (reuses existing tools)
-$gitTfs = "C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe"
+# Add a new agent workspace (reuses existing tools in _workspace\_tools)
+$rootDir = "C:\TFVC-to-Git-Migration"
+cd $rootDir
 
-& $gitTfs sync --init-workspace `
-  --workspace-root="C:\TFVC-to-Git-Migration" `
-  --workspace-name="AnotherProject"
+.\git-tfs.exe sync --init-workspace --workspace-name="AnotherProject"
 
 # Then manually initialize git-tfs in the new workspace
-cd C:\TFVC-to-Git-Migration\AnotherProject\repo
-git tfs init https://dev.azure.com/MyOrg $/AnotherProject/Main
-git tfs fetch
+cd _workspace\_agents\AnotherProject\repo
+..\..\..\..\git-tfs.exe init https://dev.azure.com/MyOrg $/AnotherProject/Main
+..\..\..\..\git-tfs.exe fetch
 ```
 
 This creates:
 ```
 C:\TFVC-to-Git-Migration\
-├── _tools\
-│   ├── git-tfs\
-│   │   └── git-tfs.exe         # Persistent installation
-│   └── git-portable\           # Auto-installed if --auto-install-git used
-│       └── bin\git.exe
-└── MyProject\                  # Agent workspace
-    ├── repo\                   # Git repository
-    └── locks\                  # Lock files
-        └── MyProject.lock
+├── git-tfs.exe                      # From extracted ZIP - run from here
+├── GitTfs.dll                       # Dependencies from ZIP
+└── _workspace\                      # Created by --init-workspace
+    ├── _tools\
+    │   └── git\                     # Git Portable (auto-installed)
+    │       └── bin\git.exe
+    └── _agents\
+        ├── MyProject\               # First agent workspace
+        │   ├── repo\                # Git repository
+        │   └── locks\               # Lock files
+        │       └── MyProject.lock
+        └── AnotherProject\          # Second agent workspace
+            ├── repo\                # Git repository
+            └── locks\               # Lock files
+                └── AnotherProject.lock
 ```
 
 ### Example 3: TFVC → Git Sync (Azure DevOps Pipeline)
 
-After initialization, use the persistent git-tfs.exe in your pipeline:
+After initialization, use the git-tfs.exe from the root directory in your pipeline:
 
 ```powershell
-$workspaceRoot = "C:\TFVC-to-Git-Migration"
+$rootDir = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
-$gitTfsExe = "$workspaceRoot\_tools\git-tfs\git-tfs.exe"
-$agentWorkspace = "$workspaceRoot\$workspaceName"
+$gitTfsExe = "$rootDir\git-tfs.exe"
+$agentWorkspace = "$rootDir\_workspace\_agents\$workspaceName"
 $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 
 # Sync from TFVC to Git with file-based locking
 & $gitTfsExe sync --from-tfvc `
-  --workspace-root="$workspaceRoot" `
   --workspace-name="$workspaceName" `
   --lock-provider=file `
   --lock-file="$lockFile" `
   --lock-timeout=300
 
 # Push to Git remote with notes
-cd "$workspaceRoot\$workspaceName\repo"
+cd "$agentWorkspace\repo"
 git push origin main --force-with-lease
 git push origin refs/notes/tfvc-sync:refs/notes/tfvc-sync --force
 ```
@@ -166,15 +173,14 @@ git push origin refs/notes/tfvc-sync:refs/notes/tfvc-sync --force
 ### Example 4: Git → TFVC Sync
 
 ```powershell
-$workspaceRoot = "C:\TFVC-to-Git-Migration"
+$rootDir = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
-$gitTfsExe = "$workspaceRoot\_tools\git-tfs\git-tfs.exe"
-$agentWorkspace = "$workspaceRoot\$workspaceName"
+$gitTfsExe = "$rootDir\git-tfs.exe"
+$agentWorkspace = "$rootDir\_workspace\_agents\$workspaceName"
 $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 
 # Sync from Git to TFVC with file-based locking
 & $gitTfsExe sync --to-tfvc `
-  --workspace-root="$workspaceRoot" `
   --workspace-name="$workspaceName" `
   --lock-provider=file `
   --lock-file="$lockFile" `
@@ -184,15 +190,14 @@ $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 ### Example 5: Bidirectional Sync
 
 ```powershell
-$workspaceRoot = "C:\TFVC-to-Git-Migration"
+$rootDir = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
-$gitTfsExe = "$workspaceRoot\_tools\git-tfs\git-tfs.exe"
-$agentWorkspace = "$workspaceRoot\$workspaceName"
+$gitTfsExe = "$rootDir\git-tfs.exe"
+$agentWorkspace = "$rootDir\_workspace\_agents\$workspaceName"
 $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
 
 # Bidirectional sync (TFVC → Git, then Git → TFVC)
 & $gitTfsExe sync `
-  --workspace-root="$workspaceRoot" `
   --workspace-name="$workspaceName" `
   --lock-provider=file `
   --lock-file="$lockFile" `
