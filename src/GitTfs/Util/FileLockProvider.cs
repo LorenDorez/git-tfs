@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
+using System.Text;
 using System.Threading;
 
 namespace GitTfs.Util
@@ -61,8 +61,8 @@ namespace GitTfs.Util
                         lockInfo.Hostname = Environment.MachineName;
                         lockInfo.AcquiredAt = DateTime.UtcNow;
 
-                        // Write lock info to file
-                        var json = JsonSerializer.Serialize(lockInfo, new JsonSerializerOptions { WriteIndented = true });
+                        // Write lock info to file (simple JSON format)
+                        var json = SerializeLockInfo(lockInfo);
                         writer.Write(json);
                     }
 
@@ -146,13 +146,94 @@ namespace GitTfs.Util
             try
             {
                 var json = File.ReadAllText(_lockFilePath);
-                return JsonSerializer.Deserialize<LockInfo>(json);
+                return DeserializeLockInfo(json);
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"Warning: Failed to read lock info: {ex.Message}");
                 return null;
             }
+        }
+
+        private string SerializeLockInfo(LockInfo lockInfo)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("{");
+            sb.AppendLine($"  \"Pid\": {lockInfo.Pid},");
+            sb.AppendLine($"  \"Hostname\": \"{EscapeJson(lockInfo.Hostname)}\",");
+            sb.AppendLine($"  \"AcquiredAt\": \"{lockInfo.AcquiredAt:O}\",");
+            sb.AppendLine($"  \"AcquiredBy\": \"{EscapeJson(lockInfo.AcquiredBy)}\",");
+            sb.AppendLine($"  \"PipelineId\": \"{EscapeJson(lockInfo.PipelineId)}\",");
+            sb.AppendLine($"  \"BuildNumber\": \"{EscapeJson(lockInfo.BuildNumber)}\"");
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        private LockInfo DeserializeLockInfo(string json)
+        {
+            var lockInfo = new LockInfo();
+            
+            // Simple JSON parsing (matches our serialized format)
+            var lines = json.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim().TrimEnd(',');
+                if (trimmed.StartsWith("\"Pid\":"))
+                {
+                    var value = ExtractJsonValue(trimmed);
+                    lockInfo.Pid = int.Parse(value);
+                }
+                else if (trimmed.StartsWith("\"Hostname\":"))
+                {
+                    lockInfo.Hostname = ExtractJsonStringValue(trimmed);
+                }
+                else if (trimmed.StartsWith("\"AcquiredAt\":"))
+                {
+                    var value = ExtractJsonStringValue(trimmed);
+                    lockInfo.AcquiredAt = DateTime.Parse(value, null, System.Globalization.DateTimeStyles.RoundtripKind);
+                }
+                else if (trimmed.StartsWith("\"AcquiredBy\":"))
+                {
+                    lockInfo.AcquiredBy = ExtractJsonStringValue(trimmed);
+                }
+                else if (trimmed.StartsWith("\"PipelineId\":"))
+                {
+                    lockInfo.PipelineId = ExtractJsonStringValue(trimmed);
+                }
+                else if (trimmed.StartsWith("\"BuildNumber\":"))
+                {
+                    lockInfo.BuildNumber = ExtractJsonStringValue(trimmed);
+                }
+            }
+            
+            return lockInfo;
+        }
+
+        private string EscapeJson(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+            return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        private string ExtractJsonValue(string line)
+        {
+            var colonIndex = line.IndexOf(':');
+            if (colonIndex < 0)
+                return "";
+            return line.Substring(colonIndex + 1).Trim();
+        }
+
+        private string ExtractJsonStringValue(string line)
+        {
+            var colonIndex = line.IndexOf(':');
+            if (colonIndex < 0)
+                return "";
+            var value = line.Substring(colonIndex + 1).Trim();
+            // Remove quotes
+            value = value.Trim('"');
+            // Unescape
+            return value.Replace("\\\"", "\"").Replace("\\\\", "\\");
         }
 
         private bool IsLockStale(LockInfo lockInfo, TimeSpan maxAge)

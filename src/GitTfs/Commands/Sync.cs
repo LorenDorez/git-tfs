@@ -13,7 +13,7 @@ namespace GitTfs.Commands
 {
     [Pluggable("sync")]
     [Description("sync [options]\n\nRobust bidirectional synchronization between Git and TFVC")]
-    [RequiresValidGitRepository(exempt: true)]  // Exempt because --init-workspace creates the repo
+    // Note: Does not use [RequiresValidGitRepository] because --init-workspace creates the repo
     public class Sync : GitTfsCommand
     {
         private readonly Globals _globals;
