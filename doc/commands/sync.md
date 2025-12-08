@@ -22,7 +22,7 @@ Workspace Initialization:
                                   Creates folder structure and optionally installs Git Portable
                                   Provides instructions to download git-tfs ZIP from GitHub releases
                                   No TFVC/Git parameters needed - just sets up the environment
-  --workspace-name=VALUE        Name for the agent workspace (optional, defaults to "default")
+  --workspace-name=VALUE        Name for the agent workspace (optional - if omitted, only creates base structure)
   --auto-install-git            Auto-download and install Git Portable if not detected (~45MB download from GitHub)
   
 Locking Options:
@@ -109,7 +109,31 @@ git remote add origin https://github.com/MyOrg/MyRepo.git
 git push origin main
 ```
 
-### Example 2: Add Additional Agent Workspaces
+### Example 2: Initialize Base Workspace Structure Only
+
+If you want to create just the base workspace structure without a specific agent workspace:
+
+```powershell
+# Download and extract git-tfs ZIP from GitHub releases (see Example 1)
+$rootDir = "C:\TFVC-to-Git-Migration"
+cd $rootDir
+
+# Initialize base structure only (no --workspace-name)
+.\git-tfs.exe sync --init-workspace --auto-install-git
+
+# This creates:
+#   C:\TFVC-to-Git-Migration\
+#   ├── git-tfs.exe
+#   └── _workspace\
+#       ├── _tools\git\              # Git Portable (auto-installed)
+#       └── _agents\                 # Empty - ready for agent workspaces
+
+# Later, create agent workspaces as needed
+.\git-tfs.exe sync --init-workspace --workspace-name="MyProject"
+.\git-tfs.exe sync --init-workspace --workspace-name="AnotherProject"
+```
+
+### Example 3: Add Additional Agent Workspaces
 
 After initial setup, you can add more agent workspaces. Tools are reused automatically:
 
@@ -146,7 +170,7 @@ C:\TFVC-to-Git-Migration\
                 └── AnotherProject.lock
 ```
 
-### Example 3: TFVC → Git Sync (Azure DevOps Pipeline)
+### Example 4: TFVC → Git Sync (Azure DevOps Pipeline)
 
 After initialization, use the git-tfs.exe from the root directory in your pipeline:
 
@@ -170,7 +194,7 @@ git push origin main --force-with-lease
 git push origin refs/notes/tfvc-sync:refs/notes/tfvc-sync --force
 ```
 
-### Example 4: Git → TFVC Sync
+### Example 5: Git → TFVC Sync
 
 ```powershell
 $rootDir = "C:\TFVC-to-Git-Migration"
@@ -187,7 +211,7 @@ $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
   --lock-timeout=300
 ```
 
-### Example 5: Bidirectional Sync
+### Example 6: Bidirectional Sync
 
 ```powershell
 $rootDir = "C:\TFVC-to-Git-Migration"

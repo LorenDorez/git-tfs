@@ -299,20 +299,15 @@ After enabling, you may need to:
         {
             Console.WriteLine("🚀 Initializing workspace structure...");
             Console.WriteLine($"   Root directory: {_options.WorkspaceRoot ?? Directory.GetCurrentDirectory()}");
-            Console.WriteLine($"   Workspace name: {_options.WorkspaceName ?? "default"}");
             
             var rootDir = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
-            var workspaceName = _options.WorkspaceName ?? "default";
 
             // Create directory structure under _workspace subfolder
             var workspaceDir = Path.Combine(rootDir, "_workspace");
             var toolsDir = Path.Combine(workspaceDir, "_tools");
             var agentsDir = Path.Combine(workspaceDir, "_agents");
-            var agentWorkspace = Path.Combine(agentsDir, workspaceName);
-            var repoPath = Path.Combine(agentWorkspace, "repo");
-            var locksDir = Path.Combine(agentWorkspace, "locks");
 
-            // Create workspace directory structure
+            // Create base workspace directory structure
             Directory.CreateDirectory(workspaceDir);
             Directory.CreateDirectory(toolsDir);
             Directory.CreateDirectory(agentsDir);
@@ -350,36 +345,58 @@ After enabling, you may need to:
                 Console.WriteLine($"✅ Git detected: {gitPath}");
             }
 
-            // Always create the agent workspace directory
-            Directory.CreateDirectory(repoPath);
-            Directory.CreateDirectory(locksDir);
-            Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
-            Console.WriteLine($"   Repository directory: {repoPath}");
+            // If workspace name is provided, create the agent workspace
+            if (!string.IsNullOrEmpty(_options.WorkspaceName))
+            {
+                var workspaceName = _options.WorkspaceName;
+                var agentWorkspace = Path.Combine(agentsDir, workspaceName);
+                var repoPath = Path.Combine(agentWorkspace, "repo");
+                var locksDir = Path.Combine(agentWorkspace, "locks");
 
-            // Create lock file path
-            var lockFilePath = Path.Combine(locksDir, $"{workspaceName}.lock");
-            Console.WriteLine($"   Lock file location: {lockFilePath}");
+                Directory.CreateDirectory(repoPath);
+                Directory.CreateDirectory(locksDir);
+                Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
+                Console.WriteLine($"   Repository directory: {repoPath}");
 
-            Console.WriteLine("\n✅ Workspace initialization complete!");
-            Console.WriteLine($"   Root directory: {rootDir}");
-            Console.WriteLine($"   Workspace directory: {workspaceDir}");
-            Console.WriteLine($"   Agent workspace: {agentWorkspace}");
-            Console.WriteLine($"   Repository path: {repoPath}");
-            Console.WriteLine($"   Tools directory: {Path.Combine(workspaceDir, "_tools")}");
-            Console.WriteLine($"   Agents directory: {agentsDir}");
-            Console.WriteLine($"   Lock directory: {locksDir}");
-            
-            Console.WriteLine("\nNext steps:");
-            Console.WriteLine($"  1. cd {repoPath}");
-            Console.WriteLine($"  2. ..\\..\\..\\..\\git-tfs.exe init <tfvc-url> <tfvc-path>");
-            Console.WriteLine($"  3. ..\\..\\..\\..\\git-tfs.exe fetch");
-            Console.WriteLine($"  4. git remote add origin <git-remote-url>");
-            Console.WriteLine($"  5. git push origin main");
-            Console.WriteLine($"  6. cd {rootDir}");
-            Console.WriteLine($"  7. .\\git-tfs.exe sync --workspace-name={workspaceName}");
-            
-            Console.WriteLine("\nTo add another agent workspace:");
-            Console.WriteLine($"  .\\git-tfs.exe sync --init-workspace --workspace-name=<NewWorkspaceName>");
+                // Create lock file path
+                var lockFilePath = Path.Combine(locksDir, $"{workspaceName}.lock");
+                Console.WriteLine($"   Lock file location: {lockFilePath}");
+
+                Console.WriteLine("\n✅ Workspace initialization complete!");
+                Console.WriteLine($"   Root directory: {rootDir}");
+                Console.WriteLine($"   Workspace directory: {workspaceDir}");
+                Console.WriteLine($"   Agent workspace: {agentWorkspace}");
+                Console.WriteLine($"   Repository path: {repoPath}");
+                Console.WriteLine($"   Tools directory: {Path.Combine(workspaceDir, "_tools")}");
+                Console.WriteLine($"   Agents directory: {agentsDir}");
+                Console.WriteLine($"   Lock directory: {locksDir}");
+                
+                Console.WriteLine("\nNext steps:");
+                Console.WriteLine($"  1. cd {repoPath}");
+                Console.WriteLine($"  2. ..\\..\\..\\..\\git-tfs.exe init <tfvc-url> <tfvc-path>");
+                Console.WriteLine($"  3. ..\\..\\..\\..\\git-tfs.exe fetch");
+                Console.WriteLine($"  4. git remote add origin <git-remote-url>");
+                Console.WriteLine($"  5. git push origin main");
+                Console.WriteLine($"  6. cd {rootDir}");
+                Console.WriteLine($"  7. .\\git-tfs.exe sync --workspace-name={workspaceName}");
+                
+                Console.WriteLine("\nTo add another agent workspace:");
+                Console.WriteLine($"  .\\git-tfs.exe sync --init-workspace --workspace-name=<NewWorkspaceName>");
+            }
+            else
+            {
+                // No workspace name provided - just create the base structure
+                Console.WriteLine($"   Workspace name: (none - base structure only)");
+                
+                Console.WriteLine("\n✅ Base workspace initialization complete!");
+                Console.WriteLine($"   Root directory: {rootDir}");
+                Console.WriteLine($"   Workspace directory: {workspaceDir}");
+                Console.WriteLine($"   Tools directory: {Path.Combine(workspaceDir, "_tools")}");
+                Console.WriteLine($"   Agents directory: {agentsDir}");
+                
+                Console.WriteLine("\nTo create an agent workspace:");
+                Console.WriteLine($"  .\\git-tfs.exe sync --init-workspace --workspace-name=<WorkspaceName>");
+            }
 
             return GitTfsExitCodes.OK;
         }
