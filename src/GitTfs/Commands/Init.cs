@@ -50,6 +50,16 @@ namespace GitTfs.Commands
             // Configure remote to automatically sync git notes
             _globals.Repository.ConfigureRemoteToSyncNotes();
             
+            // Remind user to push to origin after fetch
+            Trace.WriteLine("");
+            Trace.WriteLine("================================================================================");
+            Trace.WriteLine("Next steps:");
+            Trace.WriteLine("  1. Fetch TFVC history:  git tfs fetch");
+            Trace.WriteLine("  2. Add Git remote:      git remote add origin <your-git-repository-url>");
+            Trace.WriteLine("  3. Push to Git:         git push -u origin main");
+            Trace.WriteLine("================================================================================");
+            Trace.WriteLine("");
+            
             return 0;
         }
         
