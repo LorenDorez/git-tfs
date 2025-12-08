@@ -193,9 +193,9 @@ namespace GitTfs.Util
 
                     // Parse JSON to find PortableGit download URL
                     // Look for pattern: "browser_download_url":"https://...PortableGit-...-64-bit.7z.exe"
-                    var urlMatch = Regex.Match(json, @"""browser_download_url"":""([^""]+PortableGit-[^"""]+-64-bit\.7z\.exe)""");
-                    var checksumMatch = Regex.Match(json, @"""browser_download_url"":""([^""]+PortableGit-[^"""]+-64-bit\.7z\.exe\.sha256)""");
-                    var versionMatch = Regex.Match(json, @"""tag_name"":""v([^""]+)""");
+                    var urlMatch = Regex.Match(json, @"""browser_download_url"":""([^\""]+PortableGit-[^\""]+\-64-bit\.7z\.exe)""");
+                    var checksumMatch = Regex.Match(json, @"""browser_download_url"":""([^\""]+PortableGit-[^\""]+\-64-bit\.7z\.exe\.sha256)""");
+                    var versionMatch = Regex.Match(json, @"""tag_name"":""v([^\""]+)""");
 
                     if (urlMatch.Success)
                     {
