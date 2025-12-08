@@ -33,6 +33,7 @@ namespace GitTfs.Commands
         public string TfvcUrl { get; set; }
         public string TfvcPath { get; set; }
         public string GitRemoteUrl { get; set; }
+        public bool AutoInstallGit { get; set; }
 
         // Locking options
         public string LockProvider { get; set; }
@@ -74,6 +75,7 @@ namespace GitTfs.Commands
                 { "tfvc-url=", "TFS collection URL (required with --init-workspace)", v => TfvcUrl = v },
                 { "tfvc-path=", "TFVC repository path (required with --init-workspace)", v => TfvcPath = v },
                 { "git-remote-url=", "Git remote URL (required with --init-workspace)", v => GitRemoteUrl = v },
+                { "auto-install-git", "Auto-download and install Git Portable if not detected (~45MB download from GitHub)", v => AutoInstallGit = v != null },
 
                 // Locking options
                 { "lock-provider=", "Lock mechanism (currently only 'file' is supported)", v => LockProvider = v },

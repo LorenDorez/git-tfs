@@ -334,6 +334,38 @@ After enabling, you may need to:
                 Console.WriteLine($"✅ git-tfs.exe already in persistent location: {targetExePath}");
             }
 
+            // Check for Git and optionally install
+            var gitInstaller = new GitInstaller(Path.Combine(workspaceRoot, "_tools"));
+            string gitPath;
+            if (!gitInstaller.IsGitAvailable(out gitPath))
+            {
+                Console.WriteLine("\n⚠️  Git not detected on this system");
+                
+                if (_options.AutoInstallGit)
+                {
+                    if (!gitInstaller.InstallGitPortable())
+                    {
+                        Console.WriteLine("\n❌ Failed to auto-install Git Portable");
+                        Console.WriteLine("   Please install Git manually and try again.");
+                        Console.WriteLine("   Download from: https://git-scm.com/download/win");
+                        return GitTfsExitCodes.InvalidArguments;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("   Git is required for git-tfs to function.");
+                    Console.WriteLine("   Options:");
+                    Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
+                    Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
+                    Console.WriteLine("     3. Add existing Git to PATH");
+                    return GitTfsExitCodes.InvalidArguments;
+                }
+            }
+            else
+            {
+                Console.WriteLine($"✅ Git detected: {gitPath}");
+            }
+
             Console.WriteLine($"✅ Created agent workspace: {agentWorkspace}");
             Console.WriteLine($"   Repository directory: {repoPath}");
 
