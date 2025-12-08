@@ -113,11 +113,15 @@ namespace GitTfs.Test.Util
                 AcquiredAt = DateTime.UtcNow.AddHours(-3) // 3 hours ago
             };
 
-            // Manually create a stale lock
+            // Manually create a stale lock using manual JSON serialization
+            var json = string.Format("{{\"Workspace\":\"{0}\",\"AcquiredBy\":\"{1}\",\"AcquiredAt\":\"{2}\"}}",
+                lockInfo.Workspace,
+                lockInfo.AcquiredBy,
+                lockInfo.AcquiredAt.ToString("o"));
+            
             using (var fs = new FileStream(_testLockFile, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var writer = new StreamWriter(fs))
             {
-                var json = System.Text.Json.JsonSerializer.Serialize(lockInfo);
                 writer.Write(json);
             }
 

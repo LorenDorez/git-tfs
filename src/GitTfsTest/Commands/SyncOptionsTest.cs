@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using GitTfs.Commands;
+using GitTfs.Core;
 using Xunit;
 
 namespace GitTfs.Test.Commands
@@ -26,7 +27,7 @@ namespace GitTfs.Test.Commands
                 LockTimeout = 10800 // 3 hours, exceeds maximum of 2 hours
             };
 
-            var exception = Assert.Throws<GitTfs.Core.GitTfsException>(() => options.Validate());
+            var exception = Assert.Throws<GitTfsException>(() => options.Validate());
             Assert.Contains("cannot exceed 7200 seconds", exception.Message);
         }
 
@@ -38,7 +39,7 @@ namespace GitTfs.Test.Commands
                 InitWorkspace = true
             };
 
-            var exception = Assert.Throws<GitTfs.Core.GitTfsException>(() => options.Validate());
+            var exception = Assert.Throws<GitTfsException>(() => options.Validate());
             Assert.Contains("--init-workspace requires", exception.Message);
         }
 
@@ -51,7 +52,7 @@ namespace GitTfs.Test.Commands
                 ToTfvc = true
             };
 
-            var exception = Assert.Throws<GitTfs.Core.GitTfsException>(() => options.Validate());
+            var exception = Assert.Throws<GitTfsException>(() => options.Validate());
             Assert.Contains("Cannot specify both --from-tfvc and --to-tfvc", exception.Message);
         }
 
@@ -63,7 +64,7 @@ namespace GitTfs.Test.Commands
                 LockProvider = "redis"
             };
 
-            var exception = Assert.Throws<GitTfs.Core.GitTfsException>(() => options.Validate());
+            var exception = Assert.Throws<GitTfsException>(() => options.Validate());
             Assert.Contains("Unsupported lock provider", exception.Message);
         }
 
