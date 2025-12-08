@@ -471,22 +471,10 @@ After enabling, you may need to:
                 
                 if (_options.UseQuickClone)
                 {
-                    // Set gitignore template if provided
-                    if (!string.IsNullOrEmpty(_options.GitIgnoreTemplate))
-                    {
-                        (_quickClone as Clone).OptionSet.Parse(new[] { $"--gitignore-template={_options.GitIgnoreTemplate}" });
-                    }
-                    
                     cloneResult = _quickClone.Run(_options.TfvcUrl, _options.TfvcPath, "repo");
                 }
                 else
                 {
-                    // Set gitignore template if provided
-                    if (!string.IsNullOrEmpty(_options.GitIgnoreTemplate))
-                    {
-                        _clone.OptionSet.Parse(new[] { $"--gitignore-template={_options.GitIgnoreTemplate}" });
-                    }
-                    
                     cloneResult = _clone.Run(_options.TfvcUrl, _options.TfvcPath, "repo");
                 }
                 
@@ -500,6 +488,21 @@ After enabling, you may need to:
                 
                 // Navigate into the repo directory
                 Directory.SetCurrentDirectory(repoPath);
+                
+                // Apply gitignore template if provided
+                if (!string.IsNullOrEmpty(_options.GitIgnoreTemplate))
+                {
+                    Console.WriteLine($"\n📝 Applying .gitignore template: {_options.GitIgnoreTemplate}");
+                    var gitignoreApplied = ApplyGitIgnoreTemplate(_options.GitIgnoreTemplate, repoPath);
+                    if (gitignoreApplied)
+                    {
+                        Console.WriteLine("✅ .gitignore template applied and committed");
+                    }
+                    else
+                    {
+                        Console.WriteLine("⚠️  .gitignore template not applied (template not found or already exists)");
+                    }
+                }
                 
                 // Configure git notes (critical for sync)
                 Console.WriteLine("\n⚙️  Configuring git notes for sync...");
@@ -573,6 +576,84 @@ After enabling, you may need to:
             {
                 // Restore original directory
                 Directory.SetCurrentDirectory(originalDir);
+            }
+        }
+
+        private bool ApplyGitIgnoreTemplate(string templateNameOrPath, string repoPath)
+        {
+            try
+            {
+                var gitignorePath = Path.Combine(repoPath, ".gitignore");
+                
+                // Don't overwrite existing .gitignore
+                if (File.Exists(gitignorePath))
+                {
+                    Console.WriteLine($"   .gitignore already exists, skipping template application");
+                    return false;
+                }
+                
+                string templatePath = null;
+                
+                // Check if it's a file path
+                if (File.Exists(templateNameOrPath))
+                {
+                    templatePath = templateNameOrPath;
+                }
+                else
+                {
+                    // Try to resolve as a built-in template name
+                    var exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                    var templatesDir = Path.Combine(exeDir, "Templates", "gitignore");
+                    
+                    // Try with .gitignore extension
+                    var builtInPath = Path.Combine(templatesDir, $"{templateNameOrPath}.gitignore");
+                    if (File.Exists(builtInPath))
+                    {
+                        templatePath = builtInPath;
+                    }
+                    else
+                    {
+                        // Try case-insensitive search
+                        if (Directory.Exists(templatesDir))
+                        {
+                            var files = Directory.GetFiles(templatesDir, "*.gitignore");
+                            templatePath = files.FirstOrDefault(f => 
+                                Path.GetFileNameWithoutExtension(f).Equals(templateNameOrPath, StringComparison.OrdinalIgnoreCase));
+                        }
+                    }
+                }
+                
+                if (string.IsNullOrEmpty(templatePath) || !File.Exists(templatePath))
+                {
+                    Console.WriteLine($"   Template '{templateNameOrPath}' not found");
+                    return false;
+                }
+                
+                // Copy template to .gitignore
+                File.Copy(templatePath, gitignorePath);
+                Console.WriteLine($"   Copied template to .gitignore");
+                
+                // Add and commit the .gitignore file
+                var addResult = RunGitCommand("add .gitignore");
+                if (addResult != 0)
+                {
+                    Console.WriteLine($"   Failed to add .gitignore to git");
+                    return false;
+                }
+                
+                var commitResult = RunGitCommand("commit -m \"Add .gitignore from template\"");
+                if (commitResult != 0)
+                {
+                    Console.WriteLine($"   Failed to commit .gitignore");
+                    return false;
+                }
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   Error applying .gitignore template: {ex.Message}");
+                return false;
             }
         }
 
