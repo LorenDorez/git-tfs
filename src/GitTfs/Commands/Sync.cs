@@ -390,19 +390,23 @@ After enabling, you may need to:
 
             // Check if agent workspace already exists
             bool agentExists = Directory.Exists(agentWorkspace);
+            bool repoExists = Directory.Exists(repoPath);
             
-            if (agentExists)
+            if (agentExists && !_options.InitOnly)
             {
-                Console.WriteLine($"\n⚠️  Agent workspace already exists: {agentWorkspace}");
-                
-                if (!_options.InitOnly)
+                // For full init, check if repo already exists (from previous init-only or manual creation)
+                if (repoExists)
                 {
-                    Console.WriteLine("   Cannot perform full initialization - workspace already exists.");
-                    Console.WriteLine("   Use --init-only to add another workspace or choose a different name.");
+                    Console.WriteLine($"\n⚠️  Agent workspace already exists: {agentWorkspace}");
+                    Console.WriteLine("   Repository directory already exists - cannot perform full initialization.");
+                    Console.WriteLine("   Options:");
+                    Console.WriteLine("     1. Use --init-only to verify/update folder structure only");
+                    Console.WriteLine("     2. Delete the existing workspace and try again");
+                    Console.WriteLine($"     3. Choose a different workspace name");
                     return GitTfsExitCodes.InvalidArguments;
                 }
-                
-                Console.WriteLine("   Proceeding with --init-only (folder structure verification)");
+                // Agent workspace exists but repo doesn't - this is OK for full init
+                Console.WriteLine($"\n✅ Using existing agent workspace: {agentWorkspace}");
             }
 
             // Create agent workspace directories
@@ -411,6 +415,11 @@ After enabling, you may need to:
             if (_options.InitOnly)
             {
                 Directory.CreateDirectory(repoPath);
+            }
+            else
+            {
+                // For full init, ensure agent workspace exists (but not repo - clone will create it)
+                Directory.CreateDirectory(agentWorkspace);
             }
             Directory.CreateDirectory(locksDir);
             
