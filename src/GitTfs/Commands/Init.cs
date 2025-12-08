@@ -39,14 +39,80 @@ namespace GitTfs.Commands
             DoGitInitDb();
             VerifyGitUserConfig();
             SaveAuthorFileInRepository();
-            CommitTheGitIgnoreFile(_remoteOptions.GitIgnorePath);
-            UseTheGitIgnoreFile(_remoteOptions.GitIgnorePath);
+            
+            // Handle gitignore template if specified (takes precedence over gitignore path)
+            string gitIgnorePath = ResolveGitIgnorePath();
+            CommitTheGitIgnoreFile(gitIgnorePath);
+            UseTheGitIgnoreFile(gitIgnorePath);
+            
             GitTfsInit(tfsUrl, tfsRepositoryPath);
             
             // Configure remote to automatically sync git notes
             _globals.Repository.ConfigureRemoteToSyncNotes();
             
             return 0;
+        }
+        
+        private string ResolveGitIgnorePath()
+        {
+            // GitIgnoreTemplate takes precedence over GitIgnorePath
+            if (!string.IsNullOrWhiteSpace(_initOptions.GitIgnoreTemplate))
+            {
+                return ResolveGitIgnoreTemplate(_initOptions.GitIgnoreTemplate);
+            }
+            return _remoteOptions.GitIgnorePath;
+        }
+        
+        private string ResolveGitIgnoreTemplate(string template)
+        {
+            // Check if it's a file path (exists on disk)
+            if (File.Exists(template))
+            {
+                Trace.WriteLine($"Using custom .gitignore file: {template}");
+                return template;
+            }
+            
+            // Check if it's a built-in template name
+            string builtInTemplatePath = Path.Combine(
+                Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".",
+                "Templates",
+                "gitignore",
+                $"{template}.gitignore"
+            );
+            
+            if (File.Exists(builtInTemplatePath))
+            {
+                Trace.WriteLine($"Using built-in .gitignore template: {template}");
+                return builtInTemplatePath;
+            }
+            
+            // Try common variations
+            string[] commonVariations = new[]
+            {
+                template,
+                template.ToLowerInvariant(),
+                char.ToUpperInvariant(template[0]) + template.Substring(1).ToLowerInvariant()
+            };
+            
+            foreach (var variation in commonVariations)
+            {
+                string variantPath = Path.Combine(
+                    Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".",
+                    "Templates",
+                    "gitignore",
+                    $"{variation}.gitignore"
+                );
+                
+                if (File.Exists(variantPath))
+                {
+                    Trace.WriteLine($"Using built-in .gitignore template: {variation}");
+                    return variantPath;
+                }
+            }
+            
+            // If template not found, warn but continue
+            Trace.TraceWarning($"warning: .gitignore template '{template}' not found. Continuing without .gitignore.");
+            return null;
         }
 
         private void VerifyGitUserConfig()

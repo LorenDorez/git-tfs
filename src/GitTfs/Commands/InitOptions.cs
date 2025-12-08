@@ -24,6 +24,7 @@ namespace GitTfs.Commands
                         v => GitInitIgnoreCase = ValidateIgnoreCaseValue(v) },
                     {"bare", "Clone the TFS repository in a bare git repository", v => IsBare = v != null},
                     {"workspace=", "Set tfs workspace to a specific folder (a shorter path is better!)", v => WorkspacePath = v},
+                    {"gitignore-template=", "Apply built-in template (e.g., VisualStudio, Java) or custom .gitignore file path", v => GitIgnoreTemplate = v},
                 };
 
         private string ValidateCrlfValue(string v)
@@ -50,5 +51,6 @@ namespace GitTfs.Commands
         public string GitInitDefaultBranch { get; set; }
         public string GitInitAutoCrlf { get; set; }
         public string GitInitIgnoreCase { get; set; }
+        public string GitIgnoreTemplate { get; set; }
     }
 }
