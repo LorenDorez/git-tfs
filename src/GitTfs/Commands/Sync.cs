@@ -306,7 +306,7 @@ After enabling, you may need to:
 
             // Create directory structure under _workspace subfolder
             var workspaceDir = Path.Combine(rootDir, "_workspace");
-            var toolsDir = Path.Combine(workspaceDir, "_tools", "git");
+            var toolsDir = Path.Combine(workspaceDir, "_tools");
             var agentsDir = Path.Combine(workspaceDir, "_agents");
             var agentWorkspace = Path.Combine(agentsDir, workspaceName);
             var repoPath = Path.Combine(agentWorkspace, "repo");
@@ -319,7 +319,7 @@ After enabling, you may need to:
             Console.WriteLine($"✅ Created workspace directory: {workspaceDir}");
 
             // Check for Git and optionally install
-            var gitInstaller = new GitInstaller(Path.Combine(workspaceDir, "_tools"));
+            var gitInstaller = new GitInstaller(toolsDir);
             string gitPath;
             if (!gitInstaller.IsGitAvailable(out gitPath))
             {

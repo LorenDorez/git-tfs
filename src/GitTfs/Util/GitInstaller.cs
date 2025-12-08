@@ -30,7 +30,7 @@ namespace GitTfs.Util
             gitPath = null;
 
             // Check in tools directory first
-            var portableGitPath = Path.Combine(_toolsDir, "git-portable", "bin", "git.exe");
+            var portableGitPath = Path.Combine(_toolsDir, "git", "bin", "git.exe");
             if (File.Exists(portableGitPath))
             {
                 Trace.WriteLine($"[GitInstaller] Found Git in tools directory: {portableGitPath}");
@@ -112,7 +112,7 @@ namespace GitTfs.Util
                 Console.WriteLine($"   Version: {version}");
                 Console.WriteLine($"   URL: {downloadUrl}");
 
-                var gitPortableDir = Path.Combine(_toolsDir, "git-portable");
+                var gitPortableDir = Path.Combine(_toolsDir, "git");
                 var downloadPath = Path.Combine(Path.GetTempPath(), $"PortableGit-{version}.7z.exe");
                 var checksumPath = downloadPath + ".sha256";
 
