@@ -528,7 +528,7 @@ After enabling, you may need to:
                 if (_options.AutoPush)
                 {
                     Console.WriteLine($"\n🚀 Automatically pushing to Git remote...");
-                    var pushResult = RunGitCommand("push -u origin main");
+                    var pushResult = RunGitCommand("push -u origin main", useAuth: true);
                     if (pushResult != 0)
                     {
                         Console.Error.WriteLine("❌ Failed to push to Git remote");
@@ -657,14 +657,22 @@ After enabling, you may need to:
             }
         }
 
-        private int RunGitCommand(string arguments)
+        private int RunGitCommand(string arguments, bool useAuth = false)
         {
             try
             {
+                // If auth token is provided and useAuth is true, add the auth header
+                string finalArguments = arguments;
+                if (useAuth && !string.IsNullOrEmpty(_options.GitAuthToken))
+                {
+                    // Add http.extraheader config for auth
+                    finalArguments = $"-c http.extraheader=\"AUTHORIZATION: bearer {_options.GitAuthToken}\" {arguments}";
+                }
+                
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = "git",
-                    Arguments = arguments,
+                    Arguments = finalArguments,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,

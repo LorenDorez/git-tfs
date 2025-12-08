@@ -52,6 +52,7 @@ namespace GitTfs.Commands
         public string ToolsDir { get; set; }
         public string GitExe { get; set; }
         public string GitIgnoreTemplate { get; set; }
+        public string GitAuthToken { get; set; }  // PAT token for authenticated Git operations
 
         // Path exclusion options
         public string ExcludePaths { get; set; }
@@ -97,6 +98,7 @@ namespace GitTfs.Commands
                 { "tools-dir=", "Directory containing tools", v => ToolsDir = v },
                 { "git-exe=", "Path to git executable", v => GitExe = v },
                 { "gitignore-template=", "Apply built-in template or custom path", v => GitIgnoreTemplate = v },
+                { "git-auth-token=", "Personal Access Token (PAT) for authenticated Git operations (push/fetch)", v => GitAuthToken = v },
 
                 // Path exclusion options
                 { "exclude-paths=", "Exclude files/paths from sync", v => ExcludePaths = v },
