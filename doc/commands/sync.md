@@ -143,8 +143,11 @@ git-tfs clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> repo
 git-tfs quick-clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> repo
 ```
 
-**Available templates:**
-- `VisualStudio` - Ignores Visual Studio build artifacts, bin/, obj/, packages/, etc.
+**Available built-in templates:**
+- `VisualStudio` - C#/.NET projects (bin/, obj/, packages/, .vs/, etc.)
+- `Java` - Java projects (target/, build/, .class files, IDE files)
+- `Node` - Node.js/JavaScript projects (node_modules/, dist/, .env)
+- `Python` - Python projects (__pycache__/, venv/, .pyc files)
 - Custom path - Provide a path to your own .gitignore file template
 
 **Example with custom template:**
