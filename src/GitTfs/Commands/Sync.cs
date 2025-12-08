@@ -521,6 +521,23 @@ After enabling, you may need to:
                 }
                 Console.WriteLine("✅ Git remote added");
                 
+                // Auto-push if requested
+                if (_options.AutoPush)
+                {
+                    Console.WriteLine($"\n🚀 Automatically pushing to Git remote...");
+                    var pushResult = RunGitCommand("push -u origin main");
+                    if (pushResult != 0)
+                    {
+                        Console.Error.WriteLine("❌ Failed to push to Git remote");
+                        Console.Error.WriteLine("   You can manually push later with: git push -u origin main");
+                        // Don't fail the entire init, just warn
+                    }
+                    else
+                    {
+                        Console.WriteLine("✅ Successfully pushed to Git remote");
+                    }
+                }
+                
                 // Success!
                 Console.WriteLine("\n" + new string('=', 80));
                 Console.WriteLine("✅ FULL WORKSPACE INITIALIZATION COMPLETE!");
@@ -531,9 +548,17 @@ After enabling, you may need to:
                 Console.WriteLine($"   Git Remote: {_options.GitRemoteUrl}");
                 Console.WriteLine($"   Git notes: Enabled");
                 
-                Console.WriteLine("\nNext steps:");
-                Console.WriteLine($"  1. Push to Git: cd {repoPath} && git push -u origin main");
-                Console.WriteLine($"  2. Start sync:  cd {rootDir} && .\\git-tfs.exe sync --workspace-name={workspaceName}");
+                if (_options.AutoPush)
+                {
+                    Console.WriteLine("\nRepository is ready for bidirectional sync!");
+                    Console.WriteLine($"  Start sync:  cd {rootDir} && .\\git-tfs.exe sync --workspace-name={workspaceName}");
+                }
+                else
+                {
+                    Console.WriteLine("\nNext steps:");
+                    Console.WriteLine($"  1. Push to Git: cd {repoPath} && git push -u origin main");
+                    Console.WriteLine($"  2. Start sync:  cd {rootDir} && .\\git-tfs.exe sync --workspace-name={workspaceName}");
+                }
                 
                 Console.WriteLine("\nTo add another agent workspace:");
                 Console.WriteLine("  # Folder structure only:");

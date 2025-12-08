@@ -36,6 +36,7 @@ namespace GitTfs.Commands
         public string GitRemoteUrl { get; set; }
         public bool AutoInstallGit { get; set; }
         public bool UseQuickClone { get; set; }  // Use quick-clone instead of clone for faster initialization
+        public bool AutoPush { get; set; }  // Automatically push to origin after successful initialization
 
         // Locking options
         public string LockProvider { get; set; }
@@ -80,6 +81,7 @@ namespace GitTfs.Commands
                 { "git-remote-url=", "Git remote URL (required for full init unless --init-only)", v => GitRemoteUrl = v },
                 { "auto-install-git", "Auto-download and install Git Portable if not detected (~45MB download from GitHub)", v => AutoInstallGit = v != null },
                 { "use-quick-clone", "Use quick-clone (shallow) instead of full clone for faster initialization", v => UseQuickClone = v != null },
+                { "auto-push", "Automatically push to Git remote after successful initialization", v => AutoPush = v != null },
 
                 // Locking options
                 { "lock-provider=", "Lock mechanism (currently only 'file' is supported)", v => LockProvider = v },
