@@ -117,7 +117,8 @@ namespace GitTfs.Commands
             }
 
             // Validate init-workspace parameters
-            if (InitWorkspace && !InitOnly)
+            // Full init requires TFVC and Git URLs when workspace name is provided
+            if (InitWorkspace && !InitOnly && !string.IsNullOrEmpty(WorkspaceName))
             {
                 // Full init requires TFVC and Git URLs
                 if (string.IsNullOrEmpty(TfvcUrl))
