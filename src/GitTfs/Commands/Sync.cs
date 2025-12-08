@@ -302,22 +302,7 @@ After enabling, you may need to:
             Console.WriteLine($"   Workspace name: {_options.WorkspaceName ?? "default"}");
             
             var workspaceRoot = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
-            var workspaceName = _options.WorkspaceName ?? Path.GetFileName(_options.TfvcPath?.TrimEnd('/', '\\') ?? "default");
-
-            // Determine if this is a full init (with TFVC details) or just adding a new agent
-            var isFullInit = !string.IsNullOrEmpty(_options.TfvcUrl) && 
-                           !string.IsNullOrEmpty(_options.TfvcPath) && 
-                           !string.IsNullOrEmpty(_options.GitRemoteUrl);
-
-            if (isFullInit)
-            {
-                Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
-                Console.WriteLine("   Note: Single-branch sync only (no multi-branch support)");
-            }
-            else
-            {
-                Console.WriteLine("   Mode: Adding new agent workspace (tools already installed)");
-            }
+            var workspaceName = _options.WorkspaceName ?? "default";
 
             // Create directory structure - agent workspace folder
             var agentWorkspace = Path.Combine(workspaceRoot, workspaceName);
@@ -326,10 +311,10 @@ After enabling, you may need to:
             var toolsDir = Path.Combine(workspaceRoot, "_tools", "git-tfs");
             var templatesDir = Path.Combine(workspaceRoot, "_tools", "templates");
 
-            // Only create/install tools if they don't exist or if this is a full init
+            // Only create/install tools if they don't exist
             var toolsExist = Directory.Exists(toolsDir) && File.Exists(Path.Combine(toolsDir, "git-tfs.exe"));
             
-            if (!toolsExist || isFullInit)
+            if (!toolsExist)
             {
                 Directory.CreateDirectory(toolsDir);
                 Directory.CreateDirectory(templatesDir);
@@ -400,35 +385,21 @@ After enabling, you may need to:
             Console.WriteLine($"   Workspace root: {workspaceRoot}");
             Console.WriteLine($"   Agent workspace: {agentWorkspace}");
             Console.WriteLine($"   Repository path: {repoPath}");
-            
-            if (isFullInit)
-            {
-                Console.WriteLine($"   TFVC path: {_options.TfvcPath}");
-            }
-            
             Console.WriteLine($"   Tools directory: {Path.Combine(workspaceRoot, "_tools")}");
             var targetExePath = Path.Combine(toolsDir, "git-tfs.exe");
             Console.WriteLine($"   Persistent git-tfs: {targetExePath}");
             Console.WriteLine($"   Lock directory: {locksDir}");
             
             Console.WriteLine("\nNext steps:");
-            if (isFullInit)
-            {
-                Console.WriteLine($"  1. cd {repoPath}");
-                Console.WriteLine($"  2. git tfs init {_options.TfvcUrl} {_options.TfvcPath}");
-                Console.WriteLine($"  3. git tfs fetch");
-                Console.WriteLine($"  4. git remote add origin {_options.GitRemoteUrl}");
-                Console.WriteLine($"  5. git push origin main --force");
-                Console.WriteLine($"  6. git tfs sync --workspace-name={workspaceName}");
-                
-                Console.WriteLine("\nTo add another agent workspace:");
-                Console.WriteLine($"  git tfs sync --init-workspace --workspace-name=<NewWorkspaceName>");
-            }
-            else
-            {
-                Console.WriteLine($"  1. Initialize Git repository for this agent workspace");
-                Console.WriteLine($"  2. Use git tfs sync --workspace-name={workspaceName} to sync");
-            }
+            Console.WriteLine($"  1. cd {repoPath}");
+            Console.WriteLine($"  2. git tfs init <tfvc-url> <tfvc-path>");
+            Console.WriteLine($"  3. git tfs fetch");
+            Console.WriteLine($"  4. git remote add origin <git-remote-url>");
+            Console.WriteLine($"  5. git push origin main");
+            Console.WriteLine($"  6. git tfs sync --workspace-name={workspaceName}");
+            
+            Console.WriteLine("\nTo add another agent workspace:");
+            Console.WriteLine($"  git tfs sync --init-workspace --workspace-name=<NewWorkspaceName>");
 
             return GitTfsExitCodes.OK;
         }

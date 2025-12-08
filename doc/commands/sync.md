@@ -19,11 +19,9 @@ Options:
   
 Workspace Initialization:
   --init-workspace              Initialize workspace structure and self-install
-                                  Full mode: Provide --tfvc-url, --tfvc-path, --git-remote-url for initial setup
-                                  Agent-only mode: Omit TFVC/Git params to add new agent workspace using existing tools
-  --tfvc-url=VALUE              TFS collection URL (optional - for full initialization only)
-  --tfvc-path=VALUE             TFVC repository path (optional - for full initialization only)
-  --git-remote-url=VALUE        Git remote URL (optional - for full initialization only)
+                                  Creates folder structure, installs git-tfs.exe, and optionally Git Portable
+                                  No TFVC/Git parameters needed - just sets up the environment
+  --workspace-name=VALUE        Name for the agent workspace (optional, defaults to "default")
   --auto-install-git            Auto-download and install Git Portable if not detected (~45MB download from GitHub)
   
 Locking Options:
@@ -64,13 +62,9 @@ git config git-tfs.use-notes true
 
 ## Examples
 
-### Example 1: Initialize Workspace (Self-Installing) - First Time Setup
+### Example 1: Initialize Workspace (Self-Installing)
 
-This is the recommended first step for initial setup. The `--init-workspace` flag with TFVC/Git parameters will:
-- Create the recommended directory structure
-- Copy git-tfs.exe to a persistent location
-- Optionally auto-install Git Portable if not detected
-- Set up the first agent workspace for the specified TFVC path
+The `--init-workspace` flag creates the folder structure and installs git-tfs (and optionally Git). It does not run any git-tfs commands - those are run manually in the next steps.
 
 ```powershell
 # Download git-tfs.exe to a temporary location
@@ -78,22 +72,26 @@ $tempDir = $env:AGENT_TEMPDIRECTORY
 Invoke-WebRequest -Uri "https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe" `
   -OutFile "$tempDir\git-tfs.exe"
 
-# Initialize workspace with full setup (first time)
+# Initialize workspace (creates folder structure only)
 & "$tempDir\git-tfs.exe" sync --init-workspace `
   --workspace-root="C:\TFVC-to-Git-Migration" `
   --workspace-name="MyProject" `
-  --tfvc-url="https://dev.azure.com/MyOrg" `
-  --tfvc-path="$/MyProject/Main" `
-  --git-remote-url="https://github.com/MyOrg/MyRepo.git" `
   --auto-install-git
 
 # Use the persistent git-tfs.exe from now on
 $gitTfs = "C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe"
+
+# Now manually run the git-tfs commands shown in "Next steps"
+cd C:\TFVC-to-Git-Migration\MyProject\repo
+git tfs init https://dev.azure.com/MyOrg $/MyProject/Main
+git tfs fetch
+git remote add origin https://github.com/MyOrg/MyRepo.git
+git push origin main
 ```
 
-### Example 1b: Add Additional Agent Workspaces
+### Example 2: Add Additional Agent Workspaces
 
-After initial setup, you can add more agent workspaces without re-downloading tools:
+After initial setup, you can add more agent workspaces. Tools are reused automatically:
 
 ```powershell
 # Add a new agent workspace (reuses existing tools)
@@ -103,7 +101,10 @@ $gitTfs = "C:\TFVC-to-Git-Migration\_tools\git-tfs\git-tfs.exe"
   --workspace-root="C:\TFVC-to-Git-Migration" `
   --workspace-name="AnotherProject"
 
-# This creates a new agent workspace without re-downloading git-tfs or Git
+# Then manually initialize git-tfs in the new workspace
+cd C:\TFVC-to-Git-Migration\AnotherProject\repo
+git tfs init https://dev.azure.com/MyOrg $/AnotherProject/Main
+git tfs fetch
 ```
 
 This creates:
@@ -120,7 +121,7 @@ C:\TFVC-to-Git-Migration\
         └── MyProject.lock
 ```
 
-### Example 2: TFVC → Git Sync (Azure DevOps Pipeline)
+### Example 3: TFVC → Git Sync (Azure DevOps Pipeline)
 
 After initialization, use the persistent git-tfs.exe in your pipeline:
 
@@ -145,7 +146,7 @@ git push origin main --force-with-lease
 git push origin refs/notes/tfvc-sync:refs/notes/tfvc-sync --force
 ```
 
-### Example 3: Git → TFVC Sync
+### Example 4: Git → TFVC Sync
 
 ```powershell
 $workspaceRoot = "C:\TFVC-to-Git-Migration"
@@ -163,7 +164,7 @@ $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
   --lock-timeout=300
 ```
 
-### Example 4: Bidirectional Sync
+### Example 5: Bidirectional Sync
 
 ```powershell
 $workspaceRoot = "C:\TFVC-to-Git-Migration"
@@ -181,7 +182,7 @@ $lockFile = "$agentWorkspace\locks\$workspaceName.lock"
   --lock-timeout=300
 ```
 
-### Example 5: Dry Run
+### Example 6: Dry Run
 
 See what would happen without making changes:
 
@@ -189,7 +190,7 @@ See what would happen without making changes:
 git tfs sync --from-tfvc --dry-run
 ```
 
-### Example 6: Force Unlock Stale Lock
+### Example 7: Force Unlock Stale Lock
 
 If a pipeline crashed and left a stale lock:
 
