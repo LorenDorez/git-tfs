@@ -320,11 +320,12 @@ After enabling, you may need to:
                 Directory.CreateDirectory(templatesDir);
                 Console.WriteLine("✅ Created tools directory structure");
 
-                // Provide instructions to download git-tfs.exe
+                // Provide instructions to download git-tfs
                 var targetExePath = Path.Combine(toolsDir, "git-tfs.exe");
-                Console.WriteLine("\n📥 Please download git-tfs.exe and place it in the tools directory:");
-                Console.WriteLine($"   1. Download from: https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe");
-                Console.WriteLine($"   2. Place the file at: {targetExePath}");
+                Console.WriteLine("\n📥 Please download git-tfs and place it in the tools directory:");
+                Console.WriteLine($"   1. Download ZIP from: https://github.com/LorenDorez/git-tfs/releases/latest");
+                Console.WriteLine($"   2. Extract git-tfs.exe from the ZIP file");
+                Console.WriteLine($"   3. Place git-tfs.exe at: {targetExePath}");
                 Console.WriteLine("\n   Note: Copying the running executable can cause file locking issues on Windows.");
                 Console.WriteLine("         Downloading from GitHub releases is the recommended approach.");
 
@@ -387,8 +388,8 @@ After enabling, you may need to:
             Console.WriteLine("\nNext steps:");
             if (!toolsExist)
             {
-                Console.WriteLine($"  1. Download git-tfs.exe from GitHub releases and place at: {targetExePath}");
-                Console.WriteLine($"     URL: https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.exe");
+                Console.WriteLine($"  1. Download git-tfs ZIP from GitHub releases, extract, and place git-tfs.exe at: {targetExePath}");
+                Console.WriteLine($"     URL: https://github.com/LorenDorez/git-tfs/releases/latest");
                 Console.WriteLine($"  2. cd {repoPath}");
                 Console.WriteLine($"  3. git tfs init <tfvc-url> <tfvc-path>");
                 Console.WriteLine($"  4. git tfs fetch");
