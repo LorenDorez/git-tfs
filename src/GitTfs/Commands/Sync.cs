@@ -320,7 +320,7 @@ After enabling, you may need to:
             if (workspaceExists && toolsExist)
             {
                 Console.WriteLine($"✅ Workspace structure already exists: {workspaceDir}");
-                Console.WriteLine("   Skipping tools installation (already present)");
+                Console.WriteLine("   Skipping workspace creation (already present)");
             }
             else
             {
@@ -329,38 +329,38 @@ After enabling, you may need to:
                 Directory.CreateDirectory(toolsDir);
                 Directory.CreateDirectory(agentsDir);
                 Console.WriteLine($"✅ Created workspace directory: {workspaceDir}");
+            }
 
-                // Check for Git and optionally install (only if tools directory was just created)
-                var gitInstaller = new GitInstaller(toolsDir);
-                string gitPath;
-                if (!gitInstaller.IsGitAvailable(out gitPath))
+            // Check for Git and optionally install (always check, even if workspace exists)
+            var gitInstaller = new GitInstaller(toolsDir);
+            string gitPath;
+            if (!gitInstaller.IsGitAvailable(out gitPath))
+            {
+                Console.WriteLine("\n⚠️  Git not detected on this system");
+                
+                if (_options.AutoInstallGit)
                 {
-                    Console.WriteLine("\n⚠️  Git not detected on this system");
-                    
-                    if (_options.AutoInstallGit)
+                    if (!gitInstaller.InstallGitPortable())
                     {
-                        if (!gitInstaller.InstallGitPortable())
-                        {
-                            Console.WriteLine("\n❌ Failed to auto-install Git Portable");
-                            Console.WriteLine("   Please install Git manually and try again.");
-                            Console.WriteLine("   Download from: https://git-scm.com/download/win");
-                            return GitTfsExitCodes.InvalidArguments;
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("   Git is required for git-tfs to function.");
-                        Console.WriteLine("   Options:");
-                        Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
-                        Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
-                        Console.WriteLine("     3. Add existing Git to PATH");
+                        Console.WriteLine("\n❌ Failed to auto-install Git Portable");
+                        Console.WriteLine("   Please install Git manually and try again.");
+                        Console.WriteLine("   Download from: https://git-scm.com/download/win");
                         return GitTfsExitCodes.InvalidArguments;
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"✅ Git detected: {gitPath}");
+                    Console.WriteLine("   Git is required for git-tfs to function.");
+                    Console.WriteLine("   Options:");
+                    Console.WriteLine("     1. Run with --auto-install-git to automatically download Git Portable (~45MB)");
+                    Console.WriteLine("     2. Install Git manually from: https://git-scm.com/download/win");
+                    Console.WriteLine("     3. Add existing Git to PATH");
+                    return GitTfsExitCodes.InvalidArguments;
                 }
+            }
+            else
+            {
+                Console.WriteLine($"✅ Git detected: {gitPath}");
             }
 
             // Safeguard 2: Handle workspace name - required for agent workspace creation
