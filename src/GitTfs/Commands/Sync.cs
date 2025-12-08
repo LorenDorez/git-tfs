@@ -406,7 +406,12 @@ After enabling, you may need to:
             }
 
             // Create agent workspace directories
-            Directory.CreateDirectory(repoPath);
+            // Note: For full init, clone will create the repo directory
+            // For init-only, we create it manually
+            if (_options.InitOnly)
+            {
+                Directory.CreateDirectory(repoPath);
+            }
             Directory.CreateDirectory(locksDir);
             
             if (!agentExists)
