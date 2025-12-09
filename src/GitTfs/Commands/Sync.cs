@@ -51,6 +51,29 @@ namespace GitTfs.Commands
                     return InitializeWorkspace();
                 }
 
+                // Handle workspace navigation if --workspace-name is specified
+                if (!string.IsNullOrEmpty(_options.WorkspaceName))
+                {
+                    var workspaceRoot = _options.WorkspaceRoot ?? FindWorkspaceRoot();
+                    if (workspaceRoot == null)
+                    {
+                        Console.Error.WriteLine("❌ ERROR: Could not find workspace root directory. Use --workspace-root to specify it.");
+                        return GitTfsExitCodes.InvalidArguments;
+                    }
+
+                    // Navigate to the agent workspace repo directory
+                    var repoPath = Path.Combine(workspaceRoot, "_workspace", "_agents", _options.WorkspaceName, "repo");
+                    if (!Directory.Exists(repoPath))
+                    {
+                        Console.Error.WriteLine($"❌ ERROR: Workspace repository not found: {repoPath}");
+                        Console.Error.WriteLine($"   Run 'git tfs sync --init-workspace --workspace-name={_options.WorkspaceName}' first.");
+                        return GitTfsExitCodes.InvalidArguments;
+                    }
+
+                    Trace.WriteLine($"Changing to workspace repository: {repoPath}");
+                    Directory.SetCurrentDirectory(repoPath);
+                }
+
                 // Verify git notes are enabled
                 if (!VerifyGitNotesEnabled())
                 {
@@ -61,10 +84,10 @@ namespace GitTfs.Commands
                 var lockFile = _options.LockFile;
                 if (string.IsNullOrEmpty(lockFile) && !_options.NoLock)
                 {
-                    var workspaceRoot = _options.WorkspaceRoot ?? Directory.GetCurrentDirectory();
+                    var workspaceRoot = _options.WorkspaceRoot ?? FindWorkspaceRoot() ?? Directory.GetCurrentDirectory();
                     var workspaceName = _options.WorkspaceName ?? Path.GetFileName(_globals.GitDir ?? Directory.GetCurrentDirectory());
-                    var agentWorkspace = Path.Combine(workspaceRoot, workspaceName);
-                    lockFile = Path.Combine(agentWorkspace, "locks", $"{workspaceName}.lock");
+                    var lockDir = Path.Combine(workspaceRoot, "_workspace", "_agents", workspaceName, "locks");
+                    lockFile = Path.Combine(lockDir, $"{workspaceName}.lock");
                 }
 
                 // Acquire lock if needed
@@ -128,6 +151,27 @@ namespace GitTfs.Commands
                 Trace.WriteLine($"Stack trace: {ex.StackTrace}");
                 return GitTfsExitCodes.ExceptionThrown;
             }
+        }
+
+        private string FindWorkspaceRoot()
+        {
+            // Search for _workspace directory by walking up the directory tree
+            var currentDir = Directory.GetCurrentDirectory();
+            var dir = new DirectoryInfo(currentDir);
+
+            while (dir != null)
+            {
+                var workspaceDir = Path.Combine(dir.FullName, "_workspace");
+                if (Directory.Exists(workspaceDir))
+                {
+                    Trace.WriteLine($"Found workspace root: {dir.FullName}");
+                    return dir.FullName;
+                }
+                dir = dir.Parent;
+            }
+
+            Trace.WriteLine("Workspace root not found in directory tree");
+            return null;
         }
 
         private bool VerifyGitNotesEnabled()
