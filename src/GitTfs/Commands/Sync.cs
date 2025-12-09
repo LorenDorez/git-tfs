@@ -72,6 +72,12 @@ namespace GitTfs.Commands
 
                     Trace.WriteLine($"Changing to workspace repository: {repoPath}");
                     Directory.SetCurrentDirectory(repoPath);
+
+                    // CRITICAL FIX: Reinitialize the repository object after changing directories
+                    // This ensures all git operations happen in the correct repository
+                    _globals.GitDir = Path.Combine(repoPath, ".git");
+                    _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
+                    Trace.WriteLine($"Repository reinitialized for workspace at: {repoPath}");
                 }
 
                 // Verify git notes are enabled
