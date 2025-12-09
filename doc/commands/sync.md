@@ -23,7 +23,16 @@ Workspace Initialization:
                                   Provides instructions to download git-tfs ZIP from GitHub releases
                                   No TFVC/Git parameters needed - just sets up the environment
   --workspace-name=VALUE        Name for the agent workspace (optional - if omitted, only creates base structure)
+  --init-only                   Create folder structure only without cloning repository
+  --use-quick-clone             Use quick-clone (shallow) instead of full clone for faster initialization
   --auto-install-git            Auto-download and install Git Portable if not detected (~45MB download from GitHub)
+  --auto-push                   Automatically push to Git remote after initialization (requires --git-remote-url)
+  --git-auth-token=VALUE        Personal Access Token for authenticated Git operations (e.g., push)
+                                  Format: Bearer token for RFC 6750 compliance
+                                  Example: --git-auth-token=$env:GIT_TFS_PAT
+  --tfvc-url=VALUE              TFVC server URL (required for full initialization with cloning)
+  --tfvc-path=VALUE             TFVC repository path (required for full initialization with cloning)
+  --git-remote-url=VALUE        Git remote URL to add as 'origin' (required for full initialization)
   
 Locking Options:
   --lock-provider=VALUE         Lock mechanism (currently only 'file' is supported)
@@ -242,7 +251,67 @@ cd $rootDir
 .\git-tfs.exe sync --init-workspace --workspace-name="AnotherProject"
 ```
 
-### Example 3: Add Additional Agent Workspaces
+### Example 3: One-Command Full Setup with Auto-Push (Recommended for CI/CD)
+
+The most streamlined approach uses all automation features to go from zero to ready-to-sync in a single command:
+
+```powershell
+# Download and extract git-tfs ZIP from GitHub releases
+$rootDir = "C:\TFVC-to-Git-Migration"
+New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
+
+$zipPath = "$rootDir\git-tfs.zip"
+Invoke-WebRequest -Uri "https://github.com/LorenDorez/git-tfs/releases/latest/download/git-tfs.zip" `
+  -OutFile $zipPath
+
+Expand-Archive -Path $zipPath -DestinationPath $rootDir -Force
+Remove-Item $zipPath
+
+cd $rootDir
+
+# Set your Personal Access Token (PAT) for authenticated Git operations
+$env:GIT_TFS_PAT = "your-personal-access-token-here"
+
+# ONE COMMAND SETUP - Creates workspace, clones TFVC, commits .gitignore, configures git notes, adds remote, and pushes
+.\git-tfs.exe sync --init-workspace `
+  --workspace-name="MyProject" `
+  --tfvc-url="https://dev.azure.com/MyOrg" `
+  --tfvc-path="$/MyProject/Main" `
+  --git-remote-url="https://dev.azure.com/MyOrg/MyRepo.git" `
+  --use-quick-clone `
+  --gitignore-template="VisualStudio" `
+  --auto-install-git `
+  --auto-push `
+  --git-auth-token=$env:GIT_TFS_PAT
+
+# Done! Repository is fully initialized and pushed to Git remote
+# Ready for bidirectional sync:
+.\git-tfs.exe sync --workspace-name="MyProject"
+```
+
+**What this command does:**
+1. ✅ Creates `_workspace` folder structure
+2. ✅ Auto-installs Git Portable (if not detected)
+3. ✅ Quick-clones TFVC repository (shallow clone for speed)
+4. ✅ Applies and commits .gitignore template (VisualStudio)
+5. ✅ Configures git notes (`git-tfs.use-notes true`)
+6. ✅ Adds Git remote as 'origin'
+7. ✅ **Pushes to Git remote with PAT authentication**
+
+**Authentication with `--git-auth-token`:**
+- Uses RFC 6750-compliant Bearer token format
+- Internally translates to: `git -c http.extraheader="AUTHORIZATION: Bearer <token>" push`
+- Secure: Token passed as parameter, never stored
+- Works with Azure DevOps PAT tokens and other OAuth2 providers
+- Only applied to push operations (not config, add, commit, remote add)
+
+**Benefits:**
+- **Truly one-command setup** - Replaces 6+ manual steps
+- **CI/CD ready** - Perfect for automated pipelines
+- **Authenticated push** - Works with repositories requiring authentication
+- **No manual steps** - Everything configured automatically
+
+### Example 4: Add Additional Agent Workspaces
 
 After initial setup, you can add more agent workspaces. Tools are reused automatically:
 
@@ -539,6 +608,105 @@ steps:
         --workspace-name="$(WorkspaceName)" `
         --lock-provider=file `
         --lock-file="$lockFile"
+```
+
+## Authenticated Git Operations
+
+When using `--auto-push` to automatically push to a Git remote that requires authentication (such as Azure DevOps repositories), you can use the `--git-auth-token` flag to provide a Personal Access Token (PAT).
+
+### Using --git-auth-token
+
+The `--git-auth-token` flag accepts a Personal Access Token and applies it using RFC 6750-compliant Bearer authentication:
+
+```powershell
+# Set your PAT as an environment variable
+$env:GIT_TFS_PAT = "your-personal-access-token-here"
+
+# Use with --auto-push for authenticated push
+git-tfs sync --init-workspace --workspace-name="MyProject" \
+  --tfvc-url="https://dev.azure.com/MyOrg" \
+  --tfvc-path="$/MyProject/Main" \
+  --git-remote-url="https://dev.azure.com/MyOrg/MyRepo.git" \
+  --auto-push \
+  --git-auth-token=$env:GIT_TFS_PAT
+```
+
+### How It Works
+
+Internally, the `--git-auth-token` flag translates to:
+```powershell
+git -c http.extraheader="AUTHORIZATION: Bearer <token>" push -u origin --all
+```
+
+This uses the RFC 6750-compliant Bearer token format (capital 'B') for OAuth2 authentication.
+
+### Security Considerations
+
+- **Token is passed as parameter**: Never hardcoded or stored on disk
+- **Single-use per operation**: Token only used for the push operation, not persisted
+- **Selective application**: Only applied to push commands, not to config, add, commit, or remote add
+- **Environment variable support**: Can source from `$env:GIT_TFS_PAT` or Azure DevOps pipeline secrets
+
+### Azure DevOps Pipeline Integration
+
+In Azure DevOps pipelines, use a secret variable for the PAT:
+
+```yaml
+variables:
+  WorkspaceRoot: 'C:\TFVC-to-Git-Migration'
+  WorkspaceName: 'MyProject'
+  # GIT_TFS_PAT defined as secret variable in pipeline settings
+
+steps:
+- task: PowerShell@2
+  displayName: 'Initialize and Push to Git'
+  env:
+    GIT_TFS_PAT: $(GIT_TFS_PAT)  # Map secret variable to environment
+  inputs:
+    targetType: 'inline'
+    script: |
+      .\git-tfs.exe sync --init-workspace `
+        --workspace-name="$(WorkspaceName)" `
+        --tfvc-url="https://dev.azure.com/MyOrg" `
+        --tfvc-path="$/MyProject/Main" `
+        --git-remote-url="https://dev.azure.com/MyOrg/MyRepo.git" `
+        --use-quick-clone `
+        --gitignore-template="VisualStudio" `
+        --auto-push `
+        --git-auth-token=$env:GIT_TFS_PAT
+```
+
+### Creating a Personal Access Token
+
+For Azure DevOps:
+1. Navigate to **User Settings** > **Personal Access Tokens**
+2. Click **New Token**
+3. Set the name and expiration
+4. Select scopes: **Code** (Read & Write)
+5. Click **Create**
+6. Copy the token immediately (it won't be shown again)
+
+### Troubleshooting Authentication
+
+If push fails with authentication errors:
+
+1. **Verify token permissions**: Ensure the PAT has Code (Read & Write) scope
+2. **Check token expiration**: PATs have expiration dates
+3. **Verify remote URL**: Ensure `--git-remote-url` uses HTTPS (not SSH)
+4. **Test manually**: Try `git -c http.extraheader="AUTHORIZATION: Bearer <token>" push` manually
+
+### Alternative: Manual Push
+
+If you prefer to handle authentication separately, omit `--auto-push` and push manually:
+
+```powershell
+# Initialize without auto-push
+git-tfs sync --init-workspace --workspace-name="MyProject" \
+  --tfvc-url=<url> --tfvc-path=<path> --git-remote-url=<url>
+
+# Then push manually with your preferred authentication method
+cd _workspace\_agents\MyProject\repo
+git push -u origin main
 ```
 
 ## Limitations
