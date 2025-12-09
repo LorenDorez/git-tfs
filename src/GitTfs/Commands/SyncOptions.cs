@@ -53,6 +53,7 @@ namespace GitTfs.Commands
         public string GitExe { get; set; }
         public string GitIgnoreTemplate { get; set; }
         public string GitAuthToken { get; set; }  // PAT token for authenticated Git operations
+        public string InitialBranch { get; set; }  // Initial branch name (passed to git-init, requires Git >= 2.28.0)
 
         // Path exclusion options
         public string ExcludePaths { get; set; }
@@ -99,6 +100,7 @@ namespace GitTfs.Commands
                 { "git-exe=", "Path to git executable", v => GitExe = v },
                 { "gitignore-template=", "Apply built-in template or custom path", v => GitIgnoreTemplate = v },
                 { "git-auth-token=", "Personal Access Token (PAT) for authenticated Git operations (push/fetch)", v => GitAuthToken = v },
+                { "initial-branch=", "Set initial branch name (passed to git-init, requires Git >= 2.28.0, default: main)", v => InitialBranch = v },
 
                 // Path exclusion options
                 { "exclude-paths=", "Exclude files/paths from sync", v => ExcludePaths = v },

@@ -22,9 +22,10 @@ namespace GitTfs.Commands
         private readonly Clone _clone;
         private readonly QuickClone _quickClone;
         private readonly Init _init;
+        private readonly InitOptions _initOptions;
         private readonly SyncOptions _options;
 
-        public Sync(Globals globals, Fetch fetch, Rcheckin rcheckin, Clone clone, QuickClone quickClone, Init init)
+        public Sync(Globals globals, Fetch fetch, Rcheckin rcheckin, Clone clone, QuickClone quickClone, Init init, InitOptions initOptions)
         {
             _globals = globals;
             _fetch = fetch;
@@ -32,6 +33,7 @@ namespace GitTfs.Commands
             _clone = clone;
             _quickClone = quickClone;
             _init = init;
+            _initOptions = initOptions;
             _options = new SyncOptions();
         }
 
@@ -464,6 +466,12 @@ After enabling, you may need to:
             {
                 // Navigate to parent directory of repo
                 Directory.SetCurrentDirectory(agentWorkspace);
+                
+                // Set initial branch if specified
+                if (!string.IsNullOrEmpty(_options.InitialBranch))
+                {
+                    _initOptions.GitInitDefaultBranch = _options.InitialBranch;
+                }
                 
                 // Perform clone or quick-clone
                 Console.WriteLine($"\n📥 Cloning TFVC repository...");
