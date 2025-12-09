@@ -446,7 +446,7 @@ After enabling, you may need to:
                 Console.WriteLine($"  # or use quick-clone for faster initialization");
                 Console.WriteLine($"  ..\\..\\..\\..\\git-tfs.exe quick-clone --gitignore-template=VisualStudio <tfvc-url> <tfvc-path> .");
                 Console.WriteLine($"  git remote add origin <git-remote-url>");
-                Console.WriteLine($"  git push -u origin main");
+                Console.WriteLine($"  git push origin --all");
                 
                 return GitTfsExitCodes.OK;
             }
@@ -528,11 +528,11 @@ After enabling, you may need to:
                 if (_options.AutoPush)
                 {
                     Console.WriteLine($"\n🚀 Automatically pushing to Git remote...");
-                    var pushResult = RunGitCommand("push -u origin main", useAuth: true);
+                    var pushResult = RunGitCommand("push origin --all", useAuth: true);
                     if (pushResult != 0)
                     {
                         Console.Error.WriteLine("❌ Failed to push to Git remote");
-                        Console.Error.WriteLine("   You can manually push later with: git push -u origin main");
+                        Console.Error.WriteLine("   You can manually push later with: git push origin --all");
                         // Don't fail the entire init, just warn
                     }
                     else
@@ -559,7 +559,7 @@ After enabling, you may need to:
                 else
                 {
                     Console.WriteLine("\nNext steps:");
-                    Console.WriteLine($"  1. Push to Git: cd {repoPath} && git push -u origin main");
+                    Console.WriteLine($"  1. Push to Git: cd {repoPath} && git push origin --all");
                     Console.WriteLine($"  2. Start sync:  cd {rootDir} && .\\git-tfs.exe sync --workspace-name={workspaceName}");
                 }
                 
