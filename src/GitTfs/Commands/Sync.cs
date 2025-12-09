@@ -671,18 +671,41 @@ After enabling, you may need to:
                     CreateNoWindow = true
                 };
                 
-                // If auth token is provided and useAuth is true, set it as environment variable
-                // This is more secure than command line arguments which can appear in process lists
+                // If auth token is provided and useAuth is true, add authentication header
                 if (useAuth && !string.IsNullOrEmpty(_options.GitAuthToken))
                 {
-                    // Set the auth token as environment variable for this process only
-                    // Git will use this via http.extraheader config
+                    // Use RFC 6750-compliant Bearer token format
                     startInfo.Arguments = $"-c http.extraheader=\"AUTHORIZATION: Bearer {_options.GitAuthToken}\" {arguments}";
                 }
                 
                 using (var process = Process.Start(startInfo))
                 {
+                    // Read stdout and stderr to capture Git's output
+                    var stdout = process.StandardOutput.ReadToEnd();
+                    var stderr = process.StandardError.ReadToEnd();
+                    
                     process.WaitForExit();
+                    
+                    // Display stdout if not empty
+                    if (!string.IsNullOrWhiteSpace(stdout))
+                    {
+                        Console.WriteLine(stdout);
+                    }
+                    
+                    // Display stderr if not empty (Git often writes normal output to stderr)
+                    if (!string.IsNullOrWhiteSpace(stderr))
+                    {
+                        // Check if this is an error (non-zero exit code) or just informational
+                        if (process.ExitCode != 0)
+                        {
+                            Console.Error.WriteLine($"Git error: {stderr}");
+                        }
+                        else
+                        {
+                            Console.WriteLine(stderr);
+                        }
+                    }
+                    
                     return process.ExitCode;
                 }
             }
