@@ -89,7 +89,7 @@ namespace GitTfs.Commands
                 { "lock-provider=", "Lock mechanism (currently only 'file' is supported)", v => LockProvider = v },
                 { "lock-timeout=", "How long to wait for lock in seconds (default: 300, max: 7200)", v => LockTimeout = int.Parse(v) },
                 { "max-lock-age=", "Consider locks older than this stale in seconds (default: 7200)", v => MaxLockAge = int.Parse(v) },
-                { "force-unlock", "Forcibly remove stale lock", v => ForceUnlock = v != null },
+                { "force-unlock", "Forcibly remove existing lock before attempting sync (use with caution)", v => ForceUnlock = v != null },
                 { "no-lock", "Skip locking (for testing only)", v => NoLock = v != null },
                 { "lock-file=", "Path to lock file (for file-based locking)", v => LockFile = v },
 

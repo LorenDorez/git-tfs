@@ -18,18 +18,18 @@ namespace GitTfs.Commands
     {
         private readonly Globals _globals;
         private readonly Fetch _fetch;
-        private readonly Rcheckin _rcheckin;
+        private readonly SyncCheckin _syncCheckin;
         private readonly Clone _clone;
         private readonly QuickClone _quickClone;
         private readonly Init _init;
         private readonly InitOptions _initOptions;
         private readonly SyncOptions _options;
 
-        public Sync(Globals globals, Fetch fetch, Rcheckin rcheckin, Clone clone, QuickClone quickClone, Init init, InitOptions initOptions)
+        public Sync(Globals globals, Fetch fetch, SyncCheckin syncCheckin, Clone clone, QuickClone quickClone, Init init, InitOptions initOptions)
         {
             _globals = globals;
             _fetch = fetch;
-            _rcheckin = rcheckin;
+            _syncCheckin = syncCheckin;
             _clone = clone;
             _quickClone = quickClone;
             _init = init;
@@ -104,6 +104,33 @@ namespace GitTfs.Commands
                 if (!_options.NoLock)
                 {
                     lockProvider = new FileLockProvider(lockFile);
+                    
+                    // Handle --force-unlock: forcibly remove the lock before attempting to acquire it
+                    if (_options.ForceUnlock)
+                    {
+                        Console.WriteLine($"⚠️  Force-unlocking workspace '{lockName}'...");
+                        var existingLockInfo = lockProvider.GetLockInfo(lockName);
+                        if (existingLockInfo != null)
+                        {
+                            Console.WriteLine($"   Removing lock held by: {existingLockInfo.Hostname} (PID {existingLockInfo.Pid})");
+                            Console.WriteLine($"   Lock acquired at: {existingLockInfo.AcquiredAt:yyyy-MM-dd HH:mm:ss} UTC");
+                            if (!string.IsNullOrEmpty(existingLockInfo.PipelineId))
+                            {
+                                Console.WriteLine($"   Pipeline: {existingLockInfo.AcquiredBy} #{existingLockInfo.BuildNumber}");
+                            }
+                        }
+                        
+                        try
+                        {
+                            lockProvider.ForceUnlock(lockName);
+                            Console.WriteLine("✅ Lock removed successfully");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"❌ Failed to force unlock: {ex.Message}");
+                            return GitTfsExitCodes.ExceptionThrown;
+                        }
+                    }
                     
                     var lockInfo = new LockInfo
                     {
@@ -287,16 +314,67 @@ After enabling, you may need to:
                 return GitTfsExitCodes.OK;
             }
 
-            // Check in to TFVC
-            Trace.WriteLine("Checking in to TFVC...");
-            var checkinResult = _rcheckin.Run();
-            if (checkinResult != GitTfsExitCodes.OK)
+            // Step 1: Pull latest commits from Git remote (to get commits pushed by other agents/users)
+            Console.WriteLine("\n📥 Pulling latest commits from Git remote...");
+            var pullResult = PullFromGitRemote();
+            if (pullResult != GitTfsExitCodes.OK)
             {
-                Console.Error.WriteLine("❌ Checkin to TFVC failed");
-                return checkinResult;
+                Console.Error.WriteLine("❌ Failed to pull from Git remote");
+                return pullResult;
             }
 
-            Console.WriteLine("✅ Git → TFVC sync completed successfully");
+            // Step 2: Check in all untracked commits to TFVC using sync-checkin (preserves commit SHAs)
+            Console.WriteLine("\n📝 Checking in untracked commits to TFVC...");
+            
+            // CRITICAL FIX: Refresh repository again before sync-checkin
+            // SyncCheckin uses its own injected Globals instance, so we need to refresh it
+            Trace.WriteLine("Refreshing repository before sync-checkin to ensure notes are visible...");
+            _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
+            Trace.WriteLine("Repository refreshed for sync-checkin");
+            
+            // CRITICAL FIX: Skip the pre-checkin fetch in SyncCheckin since we're in a git-to-tfvc only sync
+            // This prevents unnecessary fetches that could overwrite notes
+            Environment.SetEnvironmentVariable("GIT_TFS_SKIP_PRECHECKIN_FETCH", "true");
+            
+            try
+            {
+                var checkinResult = _syncCheckin.Run();
+                if (checkinResult != GitTfsExitCodes.OK)
+                {
+                    Console.Error.WriteLine("❌ Checkin to TFVC failed");
+                    return checkinResult;
+                }
+            }
+            catch (GitTfsException ex)
+            {
+                // Check if this is the "no commits to checkin" scenario
+                // This happens when there are no new Git commits since last sync
+                if (ex.Message != null && 
+                    (ex.Message.Contains("latest TFS commit should be parent") ||
+                     ex.Message.Contains("No commits to checkin")))
+                {
+                    Console.WriteLine("ℹ️  No new commits to sync to TFVC");
+                }
+                else
+                {
+                    throw;
+                }
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("GIT_TFS_SKIP_PRECHECKIN_FETCH", null);
+            }
+
+            // Step 3: Push commits and git-notes back to Git remote
+            Console.WriteLine("\n📤 Pushing commits and git-notes to Git remote...");
+            var pushResult = PushToGitRemote();
+            if (pushResult != GitTfsExitCodes.OK)
+            {
+                Console.Error.WriteLine("❌ Failed to push to Git remote");
+                return pushResult;
+            }
+
+            Console.WriteLine("\n✅ Git → TFVC sync completed successfully");
             return GitTfsExitCodes.OK;
         }
 
@@ -311,7 +389,7 @@ After enabling, you may need to:
                 return GitTfsExitCodes.OK;
             }
 
-            // First, fetch from TFVC
+            // Step 1: Fetch from TFVC
             Console.WriteLine("\n📥 Step 1: Fetching from TFVC...");
             var fetchResult = _fetch.Run(_globals.RemoteId);
             if (fetchResult != GitTfsExitCodes.OK)
@@ -320,11 +398,141 @@ After enabling, you may need to:
                 return fetchResult;
             }
 
-            // Then, check in to TFVC
-            Console.WriteLine("\n📤 Step 2: Checking in to TFVC...");
+            // Step 1.5: Merge fetched TFVC commits into HEAD
+            Console.WriteLine("\n🔄 Step 1.5: Merging TFVC changes into working branch...");
+            var tfsBranch = remote.RemoteRef;  // refs/remotes/tfs/default
+            
+            // Get the latest commit from the TFS remote
+            var tfsCommit = _globals.Repository.GetCommit(tfsBranch);
+            if (tfsCommit == null)
+            {
+                Console.Error.WriteLine("❌ Could not find TFS remote commit");
+                return GitTfsExitCodes.InvalidArguments;
+            }
+            
+            // Check if HEAD is behind the TFS remote
+            var headCommit = _globals.Repository.GetCommit("HEAD");
+            if (headCommit != null && headCommit.Sha != tfsCommit.Sha)
+            {
+                Trace.WriteLine($"Fast-forwarding HEAD from {headCommit.Sha} to {tfsCommit.Sha}");
+                
+                // Try fast-forward first (no local commits)
+                var mergeResult = RunGitCommand($"merge --ff-only {tfsBranch}");
+                if (mergeResult != 0)
+                {
+                    // If fast-forward fails, do a rebase to maintain linear history
+                    Console.WriteLine("   Fast-forward not possible, rebasing local commits...");
+                    mergeResult = RunGitCommand($"rebase {tfsBranch}");
+                    if (mergeResult != 0)
+                    {
+                        // Check if there are conflicts
+                        if (HasMergeConflicts())
+                        {
+                            var conflicts = GetConflictedFiles();
+                            Console.Error.WriteLine("❌ Failed to merge TFVC changes - conflicts detected");
+                            Console.Error.WriteLine($"   Conflicted files ({conflicts.Length}):");
+                            foreach (var file in conflicts)
+                            {
+                                Console.Error.WriteLine($"      - {file}");
+                            }
+                            Console.Error.WriteLine("\n   To resolve:");
+                            Console.Error.WriteLine("   1. Navigate to repository directory");
+                            Console.Error.WriteLine("   2. Resolve conflicts in the listed files");
+                            Console.Error.WriteLine("   3. Run: git add <resolved-files>");
+                            Console.Error.WriteLine("   4. Run: git rebase --continue");
+                            Console.Error.WriteLine("   5. Re-run the sync command");
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine("❌ Failed to merge TFVC changes");
+                        }
+                        return GitTfsExitCodes.ExceptionThrown;
+                    }
+                }
+                
+                Console.WriteLine($"✅ Working branch updated to {tfsCommit.Sha.Substring(0, 8)}");
+            }
+            else
+            {
+                Console.WriteLine("   Already up to date with TFVC");
+            }
+
+            // Step 2: Pull latest commits from Git remote (to get commits pushed by other agents/users)
+            Console.WriteLine("\n📥 Step 2: Pulling latest commits from Git remote...");
+            var pullResult = PullFromGitRemote();
+            if (pullResult != GitTfsExitCodes.OK)
+            {
+                Console.Error.WriteLine("❌ Failed to pull from Git remote");
+                return pullResult;
+            }
+
+            // CRITICAL FIX: After pulling from Git remote (which may rebase commits),
+            // we need to refresh the repository to pick up the new state
+            Trace.WriteLine("Refreshing repository after pull to update TFS remote tracking...");
+            _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
+            
+            // Re-read the TFS remote to get updated state
+            remote = _globals.Repository.ReadTfsRemote(_globals.RemoteId);
+            if (remote == null)
+            {
+                Console.Error.WriteLine("❌ ERROR: Lost TFS remote after pull");
+                return GitTfsExitCodes.InvalidArguments;
+            }
+            Trace.WriteLine($"TFS remote state after pull: MaxChangesetId={remote.MaxChangesetId}, MaxCommitHash={remote.MaxCommitHash}");
+
+            // Step 3: Check in all untracked commits to TFVC using sync-checkin (preserves commit SHAs)
+            Console.WriteLine("\n📤 Step 3: Checking in untracked commits to TFVC...");
+            
+            // CRITICAL FIX: Refresh repository again before sync-checkin
+            // SyncCheckin uses its own injected Globals instance, so we need to refresh it
+            Trace.WriteLine("Refreshing repository before sync-checkin to ensure notes are visible...");
+            _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
+            Trace.WriteLine("Repository refreshed for sync-checkin");
+            
+            // CRITICAL FIX: After rebasing in Steps 1.5 and 2, the TFS remote commit might not be in
+            // HEAD's ancestry anymore. We need to merge it back in to ensure FindParentCommits can work.
+            Trace.WriteLine("Ensuring TFS remote is in HEAD's ancestry...");
+            var currentHead = _globals.Repository.GetCommit("HEAD");
+            var tfsRemoteCommit = _globals.Repository.GetCommit(remote.RemoteRef);
+            
+            if (currentHead != null && tfsRemoteCommit != null && currentHead.Sha != tfsRemoteCommit.Sha)
+            {
+                // Check if TFS remote is an ancestor of HEAD
+                var tfsCommitsInHead = _globals.Repository.GetLastParentTfsCommits("HEAD");
+                var tfsRemoteInHistory = tfsCommitsInHead.Any(c => c.GitCommit == tfsRemoteCommit.Sha);
+                
+                if (!tfsRemoteInHistory)
+                {
+                    Trace.WriteLine($"TFS remote commit {tfsRemoteCommit.Sha.Substring(0, 8)} (C{remote.MaxChangesetId}) is not in HEAD's ancestry");
+                    Trace.WriteLine("This can happen after multiple rebases. Attempting to rebase HEAD onto TFS remote...");
+                    
+                    // Rebase HEAD onto the TFS remote to ensure it's in the ancestry
+                    var rebaseResult = RunGitCommand($"rebase {remote.RemoteRef}");
+                    if (rebaseResult != 0)
+                    {
+                        Console.Error.WriteLine("❌ Failed to rebase HEAD onto TFS remote");
+                        Console.Error.WriteLine("   This is needed to establish proper commit ancestry for sync");
+                        return GitTfsExitCodes.ExceptionThrown;
+                    }
+                    
+                    Trace.WriteLine("Successfully rebased HEAD onto TFS remote");
+                    // Refresh repository after rebase
+                    _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
+                }
+                else
+                {
+                    Trace.WriteLine($"TFS remote commit is in HEAD's ancestry");
+                }
+            }
+            Trace.WriteLine($"TFS remote ready: MaxChangesetId={remote.MaxChangesetId}, MaxCommitHash={remote.MaxCommitHash}");
+            
+            // CRITICAL FIX: Skip the pre-checkin fetch in SyncCheckin since we just fetched in Step 1
+            // This prevents overwriting the git-notes we pulled from remote in Step 2
+            Environment.SetEnvironmentVariable("GIT_TFS_SKIP_PRECHECKIN_FETCH", "true");
+            
             try
             {
-                var checkinResult = _rcheckin.Run();
+                var checkinResult = _syncCheckin.Run();
                 if (checkinResult != GitTfsExitCodes.OK)
                 {
                     Console.Error.WriteLine("❌ Checkin to TFVC failed");
@@ -347,6 +555,19 @@ After enabling, you may need to:
                     // Re-throw if it's a different error
                     throw;
                 }
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("GIT_TFS_SKIP_PRECHECKIN_FETCH", null);
+            }
+
+            // Step 4: Push commits and git-notes back to Git remote
+            Console.WriteLine("\n📤 Step 4: Pushing commits and git-notes to Git remote...");
+            var pushResult = PushToGitRemote();
+            if (pushResult != GitTfsExitCodes.OK)
+            {
+                Console.Error.WriteLine("❌ Failed to push to Git remote");
+                return pushResult;
             }
 
             Console.WriteLine("\n✅ Bidirectional sync completed successfully");
@@ -508,7 +729,7 @@ After enabling, you may need to:
             Console.WriteLine($"   TFVC URL: {_options.TfvcUrl}");
             Console.WriteLine($"   TFVC Path: {_options.TfvcPath}");
             Console.WriteLine($"   Git Remote: {_options.GitRemoteUrl}");
-            Console.WriteLine($"   Clone method: {(_options.UseQuickClone ? "quick-clone (shallow)" : "clone (full history)")}");
+            Console.WriteLine($"   Clone method: {(_options.UseQuickClone ? "quick-clone (shallow)" : "clone (full history)") }");
 
             // Change to the repo directory for clone operation
             var originalDir = Directory.GetCurrentDirectory();
@@ -586,16 +807,32 @@ After enabling, you may need to:
                 if (_options.AutoPush)
                 {
                     Console.WriteLine($"\n🚀 Automatically pushing to Git remote...");
+                    
+                    // Push all branches
                     var pushResult = RunGitCommand("push origin --all", useAuth: true);
                     if (pushResult != 0)
                     {
-                        Console.Error.WriteLine("❌ Failed to push to Git remote");
+                        Console.Error.WriteLine("❌ Failed to push branches to Git remote");
                         Console.Error.WriteLine("   You can manually push later with: git push origin --all");
                         // Don't fail the entire init, just warn
                     }
                     else
                     {
-                        Console.WriteLine("✅ Successfully pushed to Git remote");
+                        Console.WriteLine("✅ Successfully pushed branches to Git remote");
+                    }
+                    
+                    // Push git-notes (critical for sync tracking)
+                    Console.WriteLine("\n📝 Pushing git-notes to Git remote...");
+                    var notesPushResult = RunGitCommand($"push origin {GitTfsConstants.TfvcSyncNotesRef}", useAuth: true);
+                    if (notesPushResult != 0)
+                    {
+                        Console.WriteLine("⚠️  Failed to push git-notes to Git remote");
+                        Console.WriteLine("   Git-notes will be pushed during first sync operation");
+                        // Don't fail - notes can be pushed later during sync
+                    }
+                    else
+                    {
+                        Console.WriteLine("✅ Successfully pushed git-notes to Git remote");
                     }
                 }
                 
@@ -771,6 +1008,231 @@ After enabling, you may need to:
             {
                 Console.Error.WriteLine($"Failed to run git command: {ex.Message}");
                 return 1;
+            }
+        }
+
+        /// <summary>
+        /// Pulls latest commits from the Git remote to get commits pushed by other agents/users.
+        /// Handles both Case 2 (remote commits without tracking) and Case 3 (mix of local and remote).
+        /// </summary>
+        private int PullFromGitRemote()
+        {
+            try
+            {
+                // Check if we have a Git remote configured
+                var hasRemote = RunGitCommand("remote get-url origin") == 0;
+                if (!hasRemote)
+                {
+                    Trace.WriteLine("No Git remote 'origin' configured, skipping pull");
+                    Console.WriteLine("ℹ️  No Git remote configured, skipping pull");
+                    return GitTfsExitCodes.OK;
+                }
+
+                // Get current branch name
+                var branchName = _globals.Repository.GetCurrentBranch();
+                if (string.IsNullOrEmpty(branchName))
+                {
+                    Trace.WriteLine("Unable to determine current branch, skipping pull");
+                    Console.WriteLine("ℹ️  Unable to determine current branch, skipping pull");
+                    return GitTfsExitCodes.OK;
+                }
+
+                // Extract short branch name (e.g., "main" from "refs/heads/main")
+                var shortBranchName = branchName.Replace("refs/heads/", "");
+
+                // Configure Git for better auto-merge during rebase
+                ConfigureAutoMerge();
+
+                // Fetch git-notes first to ensure they're available during rebase
+                Trace.WriteLine($"Fetching git-notes from origin...");
+                var fetchNotesResult = RunGitCommand($"fetch origin {GitTfsConstants.TfvcSyncNotesRef}:{GitTfsConstants.TfvcSyncNotesRef}", useAuth: true);
+                if (fetchNotesResult == 0)
+                {
+                    Trace.WriteLine("✅ Git-notes fetched successfully");
+                }
+                else
+                {
+                    Trace.WriteLine("ℹ️  Git-notes will be synced during push");
+                }
+
+                // Pull with rebase to maintain linear history
+                Trace.WriteLine($"Pulling from origin/{shortBranchName}...");
+                var pullResult = RunGitCommand($"pull --rebase origin {shortBranchName}", useAuth: true);
+                
+                if (pullResult != 0)
+                {
+                    Console.Error.WriteLine($"Failed to pull from Git remote (branch: {shortBranchName})");
+                    Console.Error.WriteLine("If there are conflicts, resolve them manually and run sync again");
+                    return GitTfsExitCodes.ExceptionThrown;
+                }
+
+                Console.WriteLine($"✅ Pulled latest commits from origin/{shortBranchName}");
+                return GitTfsExitCodes.OK;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error pulling from Git remote: {ex.Message}");
+                Trace.WriteLine($"Pull error details: {ex}");
+                return GitTfsExitCodes.ExceptionThrown;
+            }
+        }
+
+        /// <summary>
+        /// Configures Git with settings optimized for auto-merging during sync operations.
+        /// Uses the patience algorithm for better merge results and enables auto-merge features.
+        /// </summary>
+        private void ConfigureAutoMerge()
+        {
+            Trace.WriteLine("Configuring Git for auto-merge...");
+            
+            // Use patience diff algorithm for better merge results
+            // This algorithm is better at detecting moved lines and produces cleaner merges
+            RunGitCommand("config merge.conflictstyle diff3");
+            
+            // Configure rebase to use the recursive merge strategy with patience
+            RunGitCommand("config pull.rebase true");
+            RunGitCommand("config rebase.autoStash false"); // We don't want auto-stash in CI
+            RunGitCommand("config rebase.autoSquash false"); // Keep all commits as-is
+            
+            // Enable rerere (reuse recorded resolution) for repeated conflict patterns
+            // This helps if the same conflict happens multiple times
+            RunGitCommand("config rerere.enabled true");
+            RunGitCommand("config rerere.autoUpdate true");
+            
+            Trace.WriteLine("Auto-merge configuration complete");
+        }
+
+        /// <summary>
+        /// Checks if there are any unresolved merge conflicts in the working directory.
+        /// </summary>
+        private bool HasMergeConflicts()
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "diff --name-only --diff-filter=U",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using (var process = Process.Start(startInfo))
+                {
+                    var output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                    
+                    // If there's output, there are unmerged files
+                    return !string.IsNullOrWhiteSpace(output);
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Error checking for merge conflicts: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets a list of files with merge conflicts.
+        /// </summary>
+        private string[] GetConflictedFiles()
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "diff --name-only --diff-filter=U",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using (var process = Process.Start(startInfo))
+                {
+                    var output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                    
+                    if (string.IsNullOrWhiteSpace(output))
+                        return new string[0];
+                    
+                    return output.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Error getting conflicted files: {ex.Message}");
+                return new string[0];
+            }
+        }
+
+        /// <summary>
+        /// Pushes commits and git-notes to the Git remote.
+        /// Ensures both commits and tracking metadata are synced.
+        /// Uses --force-with-lease to handle history divergence after rebasing.
+        /// </summary>
+        private int PushToGitRemote()
+        {
+            try
+            {
+                // Check if we have a Git remote configured
+                var hasRemote = RunGitCommand("remote get-url origin") == 0;
+                if (!hasRemote)
+                {
+                    Trace.WriteLine("No Git remote 'origin' configured, skipping push");
+                    Console.WriteLine("ℹ️  No Git remote configured, skipping push");
+                    return GitTfsExitCodes.OK;
+                }
+
+                // Get current branch name
+                var branchName = _globals.Repository.GetCurrentBranch();
+                if (string.IsNullOrEmpty(branchName))
+                {
+                    Trace.WriteLine("Unable to determine current branch, skipping push");
+                    Console.WriteLine("ℹ️  Unable to determine current branch, skipping push");
+                    return GitTfsExitCodes.OK;
+                }
+
+                // Extract short branch name (e.g., "main" from "refs/heads/main")
+                var shortBranchName = branchName.Replace("refs/heads/", "");
+
+                // Push commits with --force-with-lease to handle rebase scenarios
+                // This is safe because:
+                // 1. We hold the sync lock, so no concurrent modifications
+                // 2. We pulled the latest changes before rebasing
+                // 3. The rebases maintain all commits (just with different SHAs)
+                Trace.WriteLine($"Pushing commits to origin/{shortBranchName} (with force-with-lease due to rebasing)...");
+                var pushResult = RunGitCommand($"push --force-with-lease origin {shortBranchName}", useAuth: true);
+                
+                if (pushResult != 0)
+                {
+                    Console.Error.WriteLine($"Failed to push commits to Git remote (branch: {shortBranchName})");
+                    return GitTfsExitCodes.ExceptionThrown;
+                }
+
+                // Push git-notes (also with force to handle rebase scenarios)
+                Trace.WriteLine("Pushing git-notes to remote (with force)...");
+                var notesPushResult = RunGitCommand($"push --force origin {GitTfsConstants.TfvcSyncNotesRef}", useAuth: true);
+                
+                if (notesPushResult != 0)
+                {
+                    Console.Error.WriteLine("Failed to push git-notes to Git remote");
+                    Console.Error.WriteLine("Commits were pushed, but tracking metadata was not synced");
+                    return GitTfsExitCodes.ExceptionThrown;
+                }
+
+                Console.WriteLine($"✅ Pushed commits and git-notes to origin/{shortBranchName}");
+                return GitTfsExitCodes.OK;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error pushing to Git remote: {ex.Message}");
+                Trace.WriteLine($"Push error details: {ex}");
+                return GitTfsExitCodes.ExceptionThrown;
             }
         }
     }

@@ -144,7 +144,11 @@ namespace GitTfs.VsCommon
             }
         }
 
-        private void Getting(object sender, GettingEventArgs e) => Trace.WriteLine("get [C" + e.Version + "]" + e.ServerItem);
+        private void Getting(object sender, GettingEventArgs e)
+        {
+            // Just trace the getting operation without the misleading progress indicator
+            Trace.WriteLine("get [C" + e.Version + "]" + e.ServerItem);
+        }
 
         private TswaClientHyperlinkService _hyperLinkService;
 
