@@ -414,15 +414,16 @@ After enabling, you may need to:
             var headCommit = _globals.Repository.GetCommit("HEAD");
             if (headCommit != null && headCommit.Sha != tfsCommit.Sha)
             {
-                Trace.WriteLine($"Fast-forwarding HEAD from {headCommit.Sha} to {tfsCommit.Sha}");
+                Trace.WriteLine($"Merging TFVC changes from {headCommit.Sha} to {tfsCommit.Sha}");
                 
                 // Try fast-forward first (no local commits)
                 var mergeResult = RunGitCommand($"merge --ff-only {tfsBranch}");
                 if (mergeResult != 0)
                 {
-                    // If fast-forward fails, do a rebase to maintain linear history
-                    Console.WriteLine("   Fast-forward not possible, rebasing local commits...");
-                    mergeResult = RunGitCommand($"rebase {tfsBranch}");
+                    // If fast-forward fails, create a merge commit to preserve commit SHAs
+                    // This is KEY: merge commits don't change SHAs, so git-notes are preserved!
+                    Console.WriteLine("   Fast-forward not possible, creating merge commit...");
+                    mergeResult = RunGitCommand($"merge --no-ff {tfsBranch} -m \"Merge TFVC changes (C{remote.MaxChangesetId})\"");
                     if (mergeResult != 0)
                     {
                         // Check if there are conflicts
@@ -439,7 +440,7 @@ After enabling, you may need to:
                             Console.Error.WriteLine("   1. Navigate to repository directory");
                             Console.Error.WriteLine("   2. Resolve conflicts in the listed files");
                             Console.Error.WriteLine("   3. Run: git add <resolved-files>");
-                            Console.Error.WriteLine("   4. Run: git rebase --continue");
+                            Console.Error.WriteLine("   4. Run: git merge --continue");
                             Console.Error.WriteLine("   5. Re-run the sync command");
                         }
                         else
@@ -450,7 +451,7 @@ After enabling, you may need to:
                     }
                 }
                 
-                Console.WriteLine($"✅ Working branch updated to {tfsCommit.Sha.Substring(0, 8)}");
+                Console.WriteLine($"✅ Working branch updated to include TFVC commit {tfsCommit.Sha.Substring(0, 8)}");
             }
             else
             {
@@ -489,41 +490,8 @@ After enabling, you may need to:
             _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
             Trace.WriteLine("Repository refreshed for sync-checkin");
             
-            // CRITICAL FIX: After rebasing in Steps 1.5 and 2, the TFS remote commit might not be in
-            // HEAD's ancestry anymore. We need to merge it back in to ensure FindParentCommits can work.
-            Trace.WriteLine("Ensuring TFS remote is in HEAD's ancestry...");
-            var currentHead = _globals.Repository.GetCommit("HEAD");
-            var tfsRemoteCommit = _globals.Repository.GetCommit(remote.RemoteRef);
-            
-            if (currentHead != null && tfsRemoteCommit != null && currentHead.Sha != tfsRemoteCommit.Sha)
-            {
-                // Check if TFS remote is an ancestor of HEAD
-                var tfsCommitsInHead = _globals.Repository.GetLastParentTfsCommits("HEAD");
-                var tfsRemoteInHistory = tfsCommitsInHead.Any(c => c.GitCommit == tfsRemoteCommit.Sha);
-                
-                if (!tfsRemoteInHistory)
-                {
-                    Trace.WriteLine($"TFS remote commit {tfsRemoteCommit.Sha.Substring(0, 8)} (C{remote.MaxChangesetId}) is not in HEAD's ancestry");
-                    Trace.WriteLine("This can happen after multiple rebases. Attempting to rebase HEAD onto TFS remote...");
-                    
-                    // Rebase HEAD onto the TFS remote to ensure it's in the ancestry
-                    var rebaseResult = RunGitCommand($"rebase {remote.RemoteRef}");
-                    if (rebaseResult != 0)
-                    {
-                        Console.Error.WriteLine("❌ Failed to rebase HEAD onto TFS remote");
-                        Console.Error.WriteLine("   This is needed to establish proper commit ancestry for sync");
-                        return GitTfsExitCodes.ExceptionThrown;
-                    }
-                    
-                    Trace.WriteLine("Successfully rebased HEAD onto TFS remote");
-                    // Refresh repository after rebase
-                    _globals.Repository = _init.GitHelper.MakeRepository(_globals.GitDir);
-                }
-                else
-                {
-                    Trace.WriteLine($"TFS remote commit is in HEAD's ancestry");
-                }
-            }
+            // NOTE: With merge commits, the TFS remote commit is naturally in HEAD's ancestry
+            // (it's one of the parents of the merge commit). No additional rebase needed.
             Trace.WriteLine($"TFS remote ready: MaxChangesetId={remote.MaxChangesetId}, MaxCommitHash={remote.MaxCommitHash}");
             
             // CRITICAL FIX: Skip the pre-checkin fetch in SyncCheckin since we just fetched in Step 1
@@ -1013,7 +981,7 @@ After enabling, you may need to:
 
         /// <summary>
         /// Pulls latest commits from the Git remote to get commits pushed by other agents/users.
-        /// Handles both Case 2 (remote commits without tracking) and Case 3 (mix of local and remote).
+        /// Uses merge to preserve commit SHAs and git-notes (no rebase = no SHA changes).
         /// </summary>
         private int PullFromGitRemote()
         {
@@ -1040,10 +1008,7 @@ After enabling, you may need to:
                 // Extract short branch name (e.g., "main" from "refs/heads/main")
                 var shortBranchName = branchName.Replace("refs/heads/", "");
 
-                // Configure Git for better auto-merge during rebase
-                ConfigureAutoMerge();
-
-                // Fetch git-notes first to ensure they're available during rebase
+                // Fetch git-notes first to ensure they're available
                 Trace.WriteLine($"Fetching git-notes from origin...");
                 var fetchNotesResult = RunGitCommand($"fetch origin {GitTfsConstants.TfvcSyncNotesRef}:{GitTfsConstants.TfvcSyncNotesRef}", useAuth: true);
                 if (fetchNotesResult == 0)
@@ -1055,9 +1020,10 @@ After enabling, you may need to:
                     Trace.WriteLine("ℹ️  Git-notes will be synced during push");
                 }
 
-                // Pull with rebase to maintain linear history
+                // Pull with merge (NOT rebase) to preserve commit SHAs and git-notes
+                // This is KEY: merge doesn't change SHAs, so git-notes stay attached!
                 Trace.WriteLine($"Pulling from origin/{shortBranchName}...");
-                var pullResult = RunGitCommand($"pull --rebase origin {shortBranchName}", useAuth: true);
+                var pullResult = RunGitCommand($"pull --no-rebase origin {shortBranchName}", useAuth: true);
                 
                 if (pullResult != 0)
                 {
@@ -1172,8 +1138,7 @@ After enabling, you may need to:
 
         /// <summary>
         /// Pushes commits and git-notes to the Git remote.
-        /// Ensures both commits and tracking metadata are synced.
-        /// Uses --force-with-lease to handle history divergence after rebasing.
+        /// Tries regular push first (since merge commits preserve SHAs), only uses force-with-lease as fallback.
         /// </summary>
         private int PushToGitRemote()
         {
@@ -1200,22 +1165,33 @@ After enabling, you may need to:
                 // Extract short branch name (e.g., "main" from "refs/heads/main")
                 var shortBranchName = branchName.Replace("refs/heads/", "");
 
-                // Push commits with --force-with-lease to handle rebase scenarios
-                // This is safe because:
-                // 1. We hold the sync lock, so no concurrent modifications
-                // 2. We pulled the latest changes before rebasing
-                // 3. The rebases maintain all commits (just with different SHAs)
-                Trace.WriteLine($"Pushing commits to origin/{shortBranchName} (with force-with-lease due to rebasing)...");
-                var pushResult = RunGitCommand($"push --force-with-lease origin {shortBranchName}", useAuth: true);
+                // Try regular push first (should work since merge commits don't change SHAs)
+                Trace.WriteLine($"Attempting regular push to origin/{shortBranchName}...");
+                var pushResult = RunGitCommand($"push origin {shortBranchName}", useAuth: true);
                 
                 if (pushResult != 0)
                 {
-                    Console.Error.WriteLine($"Failed to push commits to Git remote (branch: {shortBranchName})");
-                    return GitTfsExitCodes.ExceptionThrown;
+                    // Regular push failed - fall back to force-with-lease
+                    // This should be rare with merge-based approach
+                    Trace.WriteLine("Regular push failed, falling back to force-with-lease...");
+                    Console.WriteLine("⚠️  Regular push rejected, using --force-with-lease as fallback");
+                    Console.WriteLine("   (This should be rare - indicates unexpected history divergence)");
+                    
+                    pushResult = RunGitCommand($"push --force-with-lease origin {shortBranchName}", useAuth: true);
+                    
+                    if (pushResult != 0)
+                    {
+                        Console.Error.WriteLine($"Failed to push commits to Git remote (branch: {shortBranchName})");
+                        return GitTfsExitCodes.ExceptionThrown;
+                    }
+                }
+                else
+                {
+                    Trace.WriteLine("✅ Regular push succeeded (no force required)");
                 }
 
-                // Push git-notes (also with force to handle rebase scenarios)
-                Trace.WriteLine("Pushing git-notes to remote (with force)...");
+                // Push git-notes (with force since notes ref is updated independently)
+                Trace.WriteLine("Pushing git-notes to remote...");
                 var notesPushResult = RunGitCommand($"push --force origin {GitTfsConstants.TfvcSyncNotesRef}", useAuth: true);
                 
                 if (notesPushResult != 0)
