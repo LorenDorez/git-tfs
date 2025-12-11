@@ -127,7 +127,7 @@ namespace GitTfs.Core
                     }
                 }
             }
-            return MakeNewLogEntry(maxChangesetId == _changeset.ChangesetId ? _changeset : _tfs.GetChangeset(maxChangesetId));
+            return MakeNewLogEntry(_changeset);
         }
 
         private void Add(IItem item, string pathInGitRepo, IGitTreeModifier treeBuilder, ITfsWorkspace workspace)

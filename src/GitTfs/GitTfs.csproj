@@ -25,6 +25,9 @@
     <None Include="app.manifest" />
     <None Include="Core\TfsInterop\README.txt" />
     <None Include="paket.references" />
+    <None Include="Templates\gitignore\*.gitignore">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NDesk.Options\NDesk.Options.csproj" />
