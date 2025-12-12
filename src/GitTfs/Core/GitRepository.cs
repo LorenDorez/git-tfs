@@ -851,6 +851,64 @@ namespace GitTfs.Core
 
         public bool IsPathIgnored(string relativePath) => _repository.Ignore.IsPathIgnored(relativePath);
 
+        /// <summary>
+        /// Resolves git user signature from environment variables, git-tfs config, 
+        /// git config, or defaults (in that order of precedence).
+        /// This is used for commits created by git-tfs (e.g., .gitignore initial commit).
+        /// 
+        /// Precedence order:
+        /// 1. Environment variables: GIT_TFS_USER_NAME / GIT_TFS_USER_EMAIL
+        /// 2. Git-TFS config: git-tfs.user.name / git-tfs.user.email (checks local ? global ? system)
+        /// 3. Git config: user.name / user.email (checks local ? global ? system)
+        /// 4. Hardcoded defaults: "git-tfs" / "git-tfs@noreply.com"
+        /// </summary>
+        public (string name, string email) ResolveGitUserSignature()
+        {
+            string name = null;
+            string email = null;
+            
+            // 1. Check environment variables (highest priority)
+            name = Environment.GetEnvironmentVariable("GIT_TFS_USER_NAME");
+            email = Environment.GetEnvironmentVariable("GIT_TFS_USER_EMAIL");
+            if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(email))
+            {
+                Trace.WriteLine($"[GitUserSignature] Using environment variables: {name} <{email}>");
+                return (name, email);
+            }
+            
+            // 2. Check git-tfs.user.* config (automatically checks local ? global ? system)
+            name = GetConfig<string>("git-tfs.user.name");
+            email = GetConfig<string>("git-tfs.user.email");
+            if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(email))
+            {
+                Trace.WriteLine($"[GitUserSignature] Using git-tfs.user.* config: {name} <{email}>");
+                return (name, email);
+            }
+            
+            // 3. Check standard user.* config (automatically checks local ? global ? system)
+            name = GetConfig<string>("user.name");
+            email = GetConfig<string>("user.email");
+            if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(email))
+            {
+                Trace.WriteLine($"[GitUserSignature] Using user.* config: {name} <{email}>");
+                return (name, email);
+            }
+            
+            // 4. Hardcoded defaults (lowest priority)
+            Trace.WriteLine($"[GitUserSignature] Using defaults: git-tfs <git-tfs@noreply.com>");
+            return ("git-tfs", "git-tfs@noreply.com");
+        }
+
+        /// <summary>
+        /// Gets a signature for git-tfs commits using the resolved git user configuration.
+        /// Uses UTC timestamp for consistency.
+        /// </summary>
+        private Signature GetGitTfsSignature()
+        {
+            var (name, email) = ResolveGitUserSignature();
+            return new Signature(name, email, DateTimeOffset.UtcNow);
+        }
+
         public string CommitGitIgnore(string pathToGitIgnoreFile)
         {
             if (!File.Exists(pathToGitIgnoreFile))
@@ -860,7 +918,7 @@ namespace GitTfs.Core
             var gitTreeBuilder = new GitTreeBuilder(_repository.ObjectDatabase);
             gitTreeBuilder.Add(".gitignore", pathToGitIgnoreFile, LibGit2Sharp.Mode.NonExecutableFile);
             var tree = gitTreeBuilder.GetTree();
-            var signature = new Signature("git-tfs", "git-tfs@noreply.com", new DateTimeOffset(2000, 1, 1, 0, 0, 0, new TimeSpan(0)));
+            var signature = GetGitTfsSignature();
             var sha = _repository.ObjectDatabase.CreateCommit(signature, signature, ".gitignore", tree, new Commit[0], false).Sha;
             Trace.WriteLine(".gitignore commit created: " + sha);
 

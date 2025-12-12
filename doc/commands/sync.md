@@ -27,6 +27,7 @@ Workspace Initialization:
   --use-quick-clone             Use quick-clone (shallow) instead of full clone for faster initialization
   --auto-install-git            Auto-download and install Git Portable if not detected (~45MB download from GitHub)
   --auto-push                   Automatically push to Git remote after initialization (requires --git-remote-url)
+  --initial-branch=VALUE        Set initial branch name (e.g., 'main' instead of 'master', requires Git >= 2.28.0)
   --git-auth-token=VALUE        Personal Access Token for authenticated Git operations (e.g., push)
                                   Format: Bearer token for RFC 6750 compliance
                                   Example: --git-auth-token=$env:GIT_TFS_PAT
@@ -201,7 +202,7 @@ cd $rootDir
 #       └── _agents\                     (agent workspaces)
 #           └── MyProject\
 #               ├── repo\                (Git repository)
-#               └── locks\               (lock files)
+#               └── MyProject.lock       (lock file)
 
 # Use the git-tfs.exe from the root directory (where it was extracted)
 $gitTfs = "$rootDir\git-tfs.exe"
@@ -350,12 +351,10 @@ C:\TFVC-to-Git-Migration\
     └── _agents\
         ├── MyProject\               # First agent workspace
         │   ├── repo\                # Git repository
-        │   └── locks\               # Lock files
-        │       └── MyProject.lock
+        │   └── MyProject.lock       # Lock file
         └── AnotherProject\          # Second agent workspace
             ├── repo\                # Git repository
-            └── locks\               # Lock files
-                └── AnotherProject.lock
+            └── AnotherProject.lock  # Lock file
 ```
 
 ### Example 4: TFVC → Git Sync (Azure DevOps Pipeline)
@@ -367,7 +366,7 @@ $rootDir = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
 $gitTfsExe = "$rootDir\git-tfs.exe"
 $agentWorkspace = "$rootDir\_workspace\_agents\$workspaceName"
-$lockFile = "$agentWorkspace\locks\$workspaceName.lock"
+$lockFile = "$agentWorkspace\$workspaceName.lock"
 
 # Sync from TFVC to Git with file-based locking
 & $gitTfsExe sync --from-tfvc `
@@ -389,7 +388,7 @@ $rootDir = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
 $gitTfsExe = "$rootDir\git-tfs.exe"
 $agentWorkspace = "$rootDir\_workspace\_agents\$workspaceName"
-$lockFile = "$agentWorkspace\locks\$workspaceName.lock"
+$lockFile = "$agentWorkspace\$workspaceName.lock"
 
 # Sync from Git to TFVC with file-based locking
 & $gitTfsExe sync --to-tfvc `
@@ -406,7 +405,7 @@ $rootDir = "C:\TFVC-to-Git-Migration"
 $workspaceName = "MyProject"
 $gitTfsExe = "$rootDir\git-tfs.exe"
 $agentWorkspace = "$rootDir\_workspace\_agents\$workspaceName"
-$lockFile = "$agentWorkspace\locks\$workspaceName.lock"
+$lockFile = "$agentWorkspace\$workspaceName.lock"
 
 # Bidirectional sync (TFVC → Git, then Git → TFVC)
 & $gitTfsExe sync `
@@ -429,7 +428,7 @@ git tfs sync --from-tfvc --dry-run
 If a pipeline crashed and left a stale lock:
 
 ```bash
-git tfs sync --force-unlock --lock-file="C:\TFVC-to-Git-Migration\MyProject\locks\MyProject.lock"
+git tfs sync --force-unlock --lock-file="C:\TFVC-to-Git-Migration\_workspace\_agents\MyProject\MyProject.lock"
 ```
 
 ## Git Auto-Installation
@@ -492,232 +491,56 @@ The `--auto-install-git` flag enables automatic download and installation of Git
 
 **Firewall Restrictions**: In environments that block external downloads, install Git manually and skip `--auto-install-git`.
 
-## Locking Mechanism
+## Initial Branch Configuration
 
-The sync command uses file-based locking to prevent race conditions when multiple pipelines try to sync simultaneously.
+The `--initial-branch` option allows you to specify the default branch name when initializing a new workspace repository. This is useful when you want to use a branch name other than the Git default (typically "master").
 
-### Lock Behavior
+### When to Use `--initial-branch`
 
-1. **Acquire**: Checks if lock file exists and is not stale
-2. **Wait**: If locked, waits up to `--lock-timeout` seconds (max 7200 = 2 hours)
-3. **Stale Detection**: If lock file is older than `--max-lock-age` (default 2 hours), auto-removes it
-4. **Release**: Deletes lock file on successful completion
-5. **Crash Recovery**: If process crashes, lock becomes stale after 2 hours
-
-### Lock File Format
-
-```json
-{
-  "version": "1.0",
-  "pid": 12345,
-  "hostname": "BUILD-AGENT-01",
-  "workspace": "MyProject",
-  "acquired_at": "2025-01-15T10:30:00Z",
-  "acquired_by": "TFVC-to-Git Pipeline",
-  "pipeline_id": "123",
-  "build_number": "20250115.1",
-  "direction": "tfvc-to-git"
-}
-```
-
-## Workflow
-
-### Bidirectional Sync Flow
-
-1. **Acquire lock** (if not `--no-lock`)
-2. **Verify git notes** are enabled
-3. **Fetch from TFVC** (using existing `git tfs fetch` command)
-4. **Check in to TFVC** (using existing `git tfs rcheckin` command)
-5. **Release lock**
-
-### Error Handling
-
-The sync command provides actionable error messages:
-
-```
-❌ ERROR: Git notes are required for 'git tfs sync' to function.
-
-Git notes allow tracking TFS metadata without modifying commit messages,
-which would change commit SHAs and break synchronization tracking.
-
-To enable git notes:
-  git config git-tfs.use-notes true
-```
-
-```
-❌ Failed to acquire lock within 300 seconds
-   Lock held by: BUILD-AGENT-02 (PID 5432)
-   Acquired at: 2025-01-15 10:30:00 UTC
-```
-
-## Azure DevOps Pipeline Integration
-
-### Classic Pipeline (TFVC Repository)
-
-**Get Sources:**
-- Repository type: `Team Foundation Version Control`
-- TFVC path: `$/MyProject/Main`
-- Clean: `false` (for persistent workspace)
-
-**Variables:**
-- `WorkspaceRoot`: `C:\TFVC-to-Git-Migration`
-- `WorkspaceName`: `MyProject`
-
-**PowerShell Task:**
+**Matching Organizational Standards**: If your organization uses "main" instead of "master":
 ```powershell
-$gitTfsExe = "$(WorkspaceRoot)\_tools\git-tfs\git-tfs.exe"
-$agentWorkspace = "$(WorkspaceRoot)\$(WorkspaceName)"
-$lockFile = "$agentWorkspace\locks\$(WorkspaceName).lock"
-
-& $gitTfsExe sync --from-tfvc `
-  --workspace-root="$(WorkspaceRoot)" `
-  --workspace-name="$(WorkspaceName)" `
-  --lock-provider=file `
-  --lock-file="$lockFile"
-```
-
-### YAML Pipeline (Git Repository)
-
-**Note**: YAML pipelines work with Git repositories. For TFVC → Git sync, use a Classic pipeline.
-
-```yaml
-trigger:
-  branches:
-    include:
-      - main
-
-pool:
-  name: 'Self-Hosted-Windows'
-
-variables:
-  WorkspaceRoot: 'C:\TFVC-to-Git-Migration'
-  WorkspaceName: 'MyProject'
-
-steps:
-- task: PowerShell@2
-  displayName: 'Sync Git to TFVC'
-  inputs:
-    targetType: 'inline'
-    script: |
-      $gitTfsExe = "$(WorkspaceRoot)\_tools\git-tfs\git-tfs.exe"
-      $agentWorkspace = "$(WorkspaceRoot)\$(WorkspaceName)"
-      $lockFile = "$agentWorkspace\locks\$(WorkspaceName).lock"
-      
-      & $gitTfsExe sync --to-tfvc `
-        --workspace-root="$(WorkspaceRoot)" `
-        --workspace-name="$(WorkspaceName)" `
-        --lock-provider=file `
-        --lock-file="$lockFile"
-```
-
-## Authenticated Git Operations
-
-When using `--auto-push` to automatically push to a Git remote that requires authentication (such as Azure DevOps repositories), you can use the `--git-auth-token` flag to provide a Personal Access Token (PAT).
-
-### Using --git-auth-token
-
-The `--git-auth-token` flag accepts a Personal Access Token and applies it using RFC 6750-compliant Bearer authentication:
-
-```powershell
-# Set your PAT as an environment variable
-$env:GIT_TFS_PAT = "your-personal-access-token-here"
-
-# Use with --auto-push for authenticated push
 git-tfs sync --init-workspace --workspace-name="MyProject" \
   --tfvc-url="https://dev.azure.com/MyOrg" \
   --tfvc-path="$/MyProject/Main" \
   --git-remote-url="https://dev.azure.com/MyOrg/MyRepo.git" \
-  --auto-push \
-  --git-auth-token=$env:GIT_TFS_PAT
+  --initial-branch="main"
 ```
+
+**Custom Branch Naming**: Use any valid Git branch name:
+```powershell
+git-tfs sync --init-workspace --workspace-name="MyProject" \
+  --initial-branch="develop" \
+  ...
+```
+
+### Requirements
+
+- **Git Version**: Requires Git >= 2.28.0 (when `init.defaultBranch` config was introduced)
+- **Validation**: git-tfs validates the branch name using Git's naming rules
+- **Default**: If not specified, uses Git's configured `init.defaultBranch` or "master"
 
 ### How It Works
 
-Internally, the `--git-auth-token` flag translates to:
-```powershell
-git -c http.extraheader="AUTHORIZATION: Bearer <token>" push -u origin --all
-```
+The `--initial-branch` option is passed to `git init --initial-branch=<name>` during repository initialization. This ensures:
+1. The first commit is created on the specified branch
+2. HEAD points to the correct branch from the start
+3. No "master" branch is created if you're using a different default
 
-This uses the RFC 6750-compliant Bearer token format (capital 'B') for OAuth2 authentication.
-
-### Security Considerations
-
-- **Token is passed as parameter**: Never hardcoded or stored on disk
-- **Single-use per operation**: Token only used for the push operation, not persisted
-- **Selective application**: Only applied to push commands, not to config, add, commit, or remote add
-- **Environment variable support**: Can source from `$env:GIT_TFS_PAT` or Azure DevOps pipeline secrets
-
-### Azure DevOps Pipeline Integration
-
-In Azure DevOps pipelines, use a secret variable for the PAT:
-
-```yaml
-variables:
-  WorkspaceRoot: 'C:\TFVC-to-Git-Migration'
-  WorkspaceName: 'MyProject'
-  # GIT_TFS_PAT defined as secret variable in pipeline settings
-
-steps:
-- task: PowerShell@2
-  displayName: 'Initialize and Push to Git'
-  env:
-    GIT_TFS_PAT: $(GIT_TFS_PAT)  # Map secret variable to environment
-  inputs:
-    targetType: 'inline'
-    script: |
-      .\git-tfs.exe sync --init-workspace `
-        --workspace-name="$(WorkspaceName)" `
-        --tfvc-url="https://dev.azure.com/MyOrg" `
-        --tfvc-path="$/MyProject/Main" `
-        --git-remote-url="https://dev.azure.com/MyOrg/MyRepo.git" `
-        --use-quick-clone `
-        --gitignore-template="VisualStudio" `
-        --auto-push `
-        --git-auth-token=$env:GIT_TFS_PAT
-```
-
-### Creating a Personal Access Token
-
-For Azure DevOps:
-1. Navigate to **User Settings** > **Personal Access Tokens**
-2. Click **New Token**
-3. Set the name and expiration
-4. Select scopes: **Code** (Read & Write)
-5. Click **Create**
-6. Copy the token immediately (it won't be shown again)
-
-### Troubleshooting Authentication
-
-If push fails with authentication errors:
-
-1. **Verify token permissions**: Ensure the PAT has Code (Read & Write) scope
-2. **Check token expiration**: PATs have expiration dates
-3. **Verify remote URL**: Ensure `--git-remote-url` uses HTTPS (not SSH)
-4. **Test manually**: Try `git -c http.extraheader="AUTHORIZATION: Bearer <token>" push` manually
-
-### Alternative: Manual Push
-
-If you prefer to handle authentication separately, omit `--auto-push` and push manually:
+### Example: Initialize with 'main' branch
 
 ```powershell
-# Initialize without auto-push
-git-tfs sync --init-workspace --workspace-name="MyProject" \
-  --tfvc-url=<url> --tfvc-path=<path> --git-remote-url=<url>
-
-# Then push manually with your preferred authentication method
-cd _workspace\_agents\MyProject\repo
-git push -u origin main
+# Full workspace initialization with main branch
+git-tfs sync --init-workspace \
+  --workspace-name="MyProject" \
+  --tfvc-url="https://dev.azure.com/MyOrg" \
+  --tfvc-path="$/MyProject/Main" \
+  --git-remote-url="https://dev.azure.com/MyOrg/MyRepo.git" \
+  --initial-branch="main" \
+  --use-quick-clone \
+  --auto-push
 ```
 
-## Limitations
-
-- **Single-branch sync only**: MVP supports one TFVC path ↔ one Git repository
-- **File-based locking only**: Future versions may support Azure Blob, Redis, etc.
-- **Windows only**: Requires Windows environment with Visual Studio Team Explorer
-- **Requires git notes**: Cannot function without git notes enabled
-
-## See Also
-
-- [fetch](fetch.md) - Fetch changesets from TFVC
-- [rcheckin](rcheckin.md) - Check in commits to TFVC
-- [Git Notes Documentation](https://git-scm.com/docs/git-notes)
+This creates the repository with:
+- Initial branch: `main` (not `master`)
+- Remote tracking: `refs/remotes/tfs/default`
+- Local branch: `refs/heads/main`

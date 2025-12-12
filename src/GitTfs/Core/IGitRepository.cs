@@ -62,6 +62,12 @@ namespace GitTfs.Core
         bool Checkout(string commitish);
         IEnumerable<GitCommit> FindParentCommits(string fromCommit, string toCommit);
         bool IsPathIgnored(string relativePath);
+        /// <summary>
+        /// Resolves git user signature from environment variables, git-tfs config, 
+        /// git config, or defaults (in that order of precedence).
+        /// Returns a tuple of (name, email).
+        /// </summary>
+        (string name, string email) ResolveGitUserSignature();
         string CommitGitIgnore(string pathToGitIgnoreFile);
         void UseGitIgnore(string pathToGitIgnoreFile);
         IDictionary<int, string> GetCommitChangeSetPairs();
