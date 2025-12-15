@@ -1663,23 +1663,66 @@ After enabling, you may need to:
                 
                 if (pushResult != 0)
                 {
-                    // Regular push failed - fall back to force-with-lease
-                    // This should be rare with merge-based approach
-                    Trace.WriteLine("Regular push failed, falling back to force-with-lease...");
-                    Console.WriteLine("⚠️  Regular push rejected, using --force-with-lease as fallback");
-                    Console.WriteLine("   (This should be rare - indicates unexpected history divergence)");
+                    // Push was rejected - likely a concurrent change from another agent
+                    Console.WriteLine("⚠️  Push rejected. Another agent may have pushed changes concurrently.");
+                    Console.WriteLine("   Pulling latest changes and retrying...");
                     
-                    pushResult = RunGitCommand($"push --force-with-lease origin {shortBranchName}", useAuth: true);
+                    // Pull again to get the latest changes (using merge to preserve SHAs)
+                    Trace.WriteLine($"Pulling latest changes before retry...");
+                    var retryPullResult = RunGitCommand($"pull --no-rebase origin {shortBranchName}", useAuth: true);
+                    if (retryPullResult != 0)
+                    {
+                        // Check if this is a merge conflict
+                        if (HasMergeConflicts())
+                        {
+                            Console.Error.WriteLine("❌ Merge conflict detected during retry pull");
+                            Console.Error.WriteLine("   This indicates concurrent modifications to the same files.");
+                            Console.Error.WriteLine("   The conflict must be resolved manually before the next sync.");
+                            
+                            var conflicts = GetConflictedFiles();
+                            var conflictInfo = AnalyzeConflict(conflicts);
+                            
+                            // Try to get the remote commit being merged
+                            var mergeHeadPath = Path.Combine(_globals.GitDir, "MERGE_HEAD");
+                            if (File.Exists(mergeHeadPath))
+                            {
+                                conflictInfo.GitRemoteCommitSha = File.ReadAllText(mergeHeadPath).Trim();
+                            }
+                            
+                            HandleMergeConflict(conflictInfo);
+                        }
+                        
+                        Console.Error.WriteLine("❌ Failed to pull latest changes for retry");
+                        Console.Error.WriteLine("   An unknown error occurred. Run 'git status' for details.");
+                        return GitTfsExitCodes.ExceptionThrown;
+                    }
+                    
+                    // Retry the push after merging latest changes
+                    Trace.WriteLine("Retrying push after pulling latest changes...");
+                    pushResult = RunGitCommand($"push origin {shortBranchName}", useAuth: true);
                     
                     if (pushResult != 0)
                     {
-                        Console.Error.WriteLine($"Failed to push commits to Git remote (branch: {shortBranchName})");
+                        Console.Error.WriteLine($"❌ Failed to push commits even after retry (branch: {shortBranchName})");
+                        Console.Error.WriteLine("");
+                        Console.Error.WriteLine("This indicates a serious synchronization issue. Possible causes:");
+                        Console.Error.WriteLine("  • Branch was force-pushed by someone else");
+                        Console.Error.WriteLine("  • Repository history was rewritten");
+                        Console.Error.WriteLine("  • Repeated concurrent pushes are occurring");
+                        Console.Error.WriteLine("");
+                        Console.Error.WriteLine("Resolution:");
+                        Console.Error.WriteLine("  1. Check repository history for unexpected changes");
+                        Console.Error.WriteLine("  2. Verify no one is force-pushing to this branch");
+                        Console.Error.WriteLine("  3. Consider increasing lock timeout if concurrent syncs are frequent");
+                        Console.Error.WriteLine("  4. Re-run sync command (will pull and retry again)");
                         return GitTfsExitCodes.ExceptionThrown;
                     }
+                    
+                    Console.WriteLine("✅ Push succeeded after retry");
                 }
                 else
                 {
-                    Trace.WriteLine("✅ Regular push succeeded (no force required)");
+                    Trace.WriteLine("✅ Regular push succeeded (no retry required)");
                 }
 
                 // Push git-notes (with force since notes ref is updated independently)
