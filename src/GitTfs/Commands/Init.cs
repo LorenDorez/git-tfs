@@ -49,18 +49,38 @@ namespace GitTfs.Commands
             return 0;
         }
 
+        /// <summary>
+        /// Verifies that Git user configuration is set. This is required for git-tfs to create commits.
+        /// Configuration can be provided via:
+        /// 1. Environment variables: GIT_TFS_USER_NAME and GIT_TFS_USER_EMAIL (highest priority)
+        /// 2. Git-tfs specific config: git-tfs.user.name and git-tfs.user.email
+        /// 3. Standard Git config: user.name and user.email
+        /// </summary>
         private void VerifyGitUserConfig()
         {
-            var userName = _globals.Repository.GetConfig<string>("user.name");
-            var userEmail = _globals.Repository.GetConfig<string>("user.email");
-            if (string.IsNullOrWhiteSpace(userName)
-                || string.IsNullOrWhiteSpace(userEmail))
+            // Try to resolve user signature using the same logic as GitRepository
+            // This checks: 1) env vars, 2) git-tfs.user.*, 3) user.*, 4) defaults
+            var (userName, userEmail) = _globals.Repository.ResolveGitUserSignature();
+            
+            // Check if we got real values (not defaults)
+            var isUsingDefaults = (userName == "git-tfs" && userEmail == "git-tfs@noreply.com");
+            
+            // Also check the standard git config directly for backwards compatibility
+            var gitUserName = _globals.Repository.GetConfig<string>("user.name");
+            var gitUserEmail = _globals.Repository.GetConfig<string>("user.email");
+            
+            // If we have proper config OR proper env vars, we're good
+            var hasValidConfig = (!string.IsNullOrWhiteSpace(gitUserName) && !string.IsNullOrWhiteSpace(gitUserEmail)) ||
+                                !isUsingDefaults;
+            
+            if (!hasValidConfig)
             {
                 throw new GitTfsException("Git-tfs requires that the user data in git config should be set. Please configure them before using git-tfs"
                                           + Environment.NewLine + "Actual config: "
-                                          + Environment.NewLine + " * user name: " + (string.IsNullOrWhiteSpace(userName) ? "<not set>" : userName)
-                                          + Environment.NewLine + " * user email: " + (string.IsNullOrWhiteSpace(userEmail) ? "<not set>" : userEmail)
-                                          + Environment.NewLine + "For help on how to set user git config, see https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup");
+                                          + Environment.NewLine + " * user name: <not set>"
+                                          + Environment.NewLine + " * user email: <not set>"
+                                          + Environment.NewLine + "For help on how to set user git config, see https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup"
+                                          + Environment.NewLine + "You can also set environment variables GIT_TFS_USER_NAME and GIT_TFS_USER_EMAIL");
             }
         }
 

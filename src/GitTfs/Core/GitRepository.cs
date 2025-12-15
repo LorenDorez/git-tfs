@@ -385,7 +385,9 @@ namespace GitTfs.Core
                 },
                 CheckoutNotifyFlags = CheckoutNotifyFlags.Conflict
             };
-            return _repository.Merge(commit, _repository.Config.BuildSignature(new DateTimeOffset(DateTime.Now)), options);
+            // Use GetGitTfsSignature() which supports environment variables instead of BuildSignature
+            var signature = GetGitTfsSignature();
+            return _repository.Merge(commit, signature, options);
         }
 
         public String GetCurrentCommit() => _repository.Head.Commits.First().Sha;
