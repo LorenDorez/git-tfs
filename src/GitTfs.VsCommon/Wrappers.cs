@@ -393,6 +393,32 @@ namespace GitTfs.VsCommon
             {
                 return _workspace.CheckIn(checkinParameters);
             }
+            catch (Microsoft.TeamFoundation.TeamFoundationServerException tfEx) when (tfEx.Message.Contains("TF14045"))
+            {
+                // TF14045: The identity <user> is not a recognized identity.
+                // This happens when the Git commit author doesn't exist as a TFS user.
+                // Fallback: retry checkin using the authenticated user (Build Service account)
+                if (author != null)
+                {
+                    Trace.TraceWarning($"warning: TFS user '{author}' is not recognized (TF14045). Retrying checkin with authenticated user (Build Service account)...");
+                    Trace.TraceWarning($"         Original Git commit author will be preserved in Git, but TFS changeset will show the Build Service account.");
+                    
+                    // Remove the author override - use the authenticated user instead
+                    checkinParameters.Author = null;
+                    
+                    try
+                    {
+                        return _workspace.CheckIn(checkinParameters);
+                    }
+                    catch (GatedCheckinException gatedException)
+                    {
+                        throw new GitTfsGatedCheckinException(gatedException.ShelvesetName, gatedException.AffectedBuildDefinitions, gatedException.CheckInTicket);
+                    }
+                }
+                
+                // If author was already null, or retry failed, re-throw the original exception
+                throw;
+            }
             catch (GatedCheckinException gatedException)
             {
                 throw new GitTfsGatedCheckinException(gatedException.ShelvesetName, gatedException.AffectedBuildDefinitions, gatedException.CheckInTicket);
