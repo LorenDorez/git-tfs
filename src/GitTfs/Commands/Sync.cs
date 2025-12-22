@@ -24,8 +24,9 @@ namespace GitTfs.Commands
         private readonly Init _init;
         private readonly InitOptions _initOptions;
         private readonly SyncOptions _options;
+        private readonly CheckinOptions _checkinOptions;
 
-        public Sync(Globals globals, Fetch fetch, SyncCheckin syncCheckin, Clone clone, QuickClone quickClone, Init init, InitOptions initOptions)
+        public Sync(Globals globals, Fetch fetch, SyncCheckin syncCheckin, Clone clone, QuickClone quickClone, Init init, InitOptions initOptions, CheckinOptions checkinOptions)
         {
             _globals = globals;
             _fetch = fetch;
@@ -35,9 +36,10 @@ namespace GitTfs.Commands
             _init = init;
             _initOptions = initOptions;
             _options = new SyncOptions();
+            _checkinOptions = checkinOptions;
         }
 
-        public OptionSet OptionSet => _options.GetOptionSet();
+        public OptionSet OptionSet => _options.GetOptionSet().Merge(_checkinOptions.OptionSet);
 
         public int Run()
         {
