@@ -391,9 +391,61 @@ After enabling, you may need to:
                 return GitTfsExitCodes.OK;
             }
 
-            // Step 1: Fetch from TFVC
+            // Step 1: Fetch from TFVC with retry on auth failure
             Console.WriteLine("\n📥 Step 1: Fetching from TFVC...");
-            var fetchResult = _fetch.Run(_globals.RemoteId);
+            
+            // Retry fetch up to 3 times if authentication fails
+            int maxRetries = 3;
+            int retryCount = 0;
+            int fetchResult = GitTfsExitCodes.ExceptionThrown;
+            
+            while (retryCount < maxRetries)
+            {
+                try
+                {
+                    fetchResult = _fetch.Run(_globals.RemoteId);
+                    if (fetchResult == GitTfsExitCodes.OK)
+                    {
+                        break; // Success, exit retry loop
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Check if this is a TFS authentication error
+                    if (ex.Message.Contains("TF30063") || ex.Message.Contains("not authorized"))
+                    {
+                        retryCount++;
+                        if (retryCount < maxRetries)
+                        {
+                            Console.WriteLine($"⚠️  TFS authentication failed (attempt {retryCount}/{maxRetries})");
+                            Console.WriteLine("   Waiting 5 seconds before retry...");
+                            System.Threading.Thread.Sleep(5000);
+                            
+                            // Force TFS connection refresh by recreating the remote
+                            Trace.WriteLine("Refreshing TFS connection...");
+                            remote = _globals.Repository.ReadTfsRemote(_globals.RemoteId);
+                            if (remote == null)
+                            {
+                                throw new GitTfsException("Failed to refresh TFS remote connection");
+                            }
+                            
+                            Console.WriteLine("   Retrying fetch...");
+                            continue;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine("❌ TFS authentication failed after all retries");
+                            throw;
+                        }
+                    }
+                    else
+                    {
+                        // Not an auth error, re-throw immediately
+                        throw;
+                    }
+                }
+            }
+            
             if (fetchResult != GitTfsExitCodes.OK)
             {
                 Console.Error.WriteLine("❌ Fetch from TFVC failed");
@@ -956,11 +1008,26 @@ After enabling, you may need to:
                     CreateNoWindow = true
                 };
                 
-                // If auth token is provided and useAuth is true, add authentication header
+                // If auth token is provided and useAuth is true, add authentication
                 if (useAuth && !string.IsNullOrEmpty(_options.GitAuthToken))
                 {
-                    // Use RFC 6750-compliant Bearer token format
-                    startInfo.Arguments = $"-c http.extraheader=\"AUTHORIZATION: Bearer {_options.GitAuthToken}\" {arguments}";
+                    // Determine auth type based on token format or remote URL
+                    var isGitHub = IsGitHubRemote();
+                    
+                    if (isGitHub)
+                    {
+                        // GitHub PAT: Use HTTP Basic Authentication with token as password
+                        // Format: base64(username:password) where username can be anything and password is the PAT
+                        var credentials = Convert.ToBase64String(
+                            System.Text.Encoding.ASCII.GetBytes($"x-access-token:{_options.GitAuthToken}")
+                        );
+                        startInfo.Arguments = $"-c http.extraheader=\"Authorization: Basic {credentials}\" {arguments}";
+                    }
+                    else
+                    {
+                        // Azure DevOps or other services: Use RFC 6750-compliant Bearer token format
+                        startInfo.Arguments = $"-c http.extraheader=\"AUTHORIZATION: Bearer {_options.GitAuthToken}\" {arguments}";
+                    }
                 }
                 
                 using (var process = Process.Start(startInfo))
@@ -998,6 +1065,39 @@ After enabling, you may need to:
             {
                 Console.Error.WriteLine($"Failed to run git command: {ex.Message}");
                 return 1;
+            }
+        }
+
+        /// <summary>
+        /// Determines if the current Git remote is GitHub
+        /// </summary>
+        private bool IsGitHubRemote()
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "remote get-url origin",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using (var process = Process.Start(startInfo))
+                {
+                    var output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+                    
+                    // Check if the remote URL contains github.com
+                    return output.IndexOf("github.com", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            catch
+            {
+                // If we can't determine, default to Azure DevOps Bearer token format
+                return false;
             }
         }
 
@@ -1353,7 +1453,6 @@ After enabling, you may need to:
             Console.Error.WriteLine("   OR use the default editor:");
             Console.Error.WriteLine("      git commit");
             Console.Error.WriteLine("      # This opens an editor with a pre-filled commit message");
-            Console.Error.WriteLine("      # An editor will open to let you edit the message");
             Console.Error.WriteLine("");
             Console.Error.WriteLine("   HOW TO SAVE AND EXIT THE EDITOR:");
             Console.Error.WriteLine("      If Vim opens:");
@@ -1466,7 +1565,6 @@ After enabling, you may need to:
             Console.Error.WriteLine("      git commit");
             Console.Error.WriteLine("      # Add a descriptive message about how conflicts were resolved");
             Console.Error.WriteLine("");
-
             Console.Error.WriteLine("STEP 5: Push Your Resolution");
             Console.Error.WriteLine("   git push origin " + conflict.Branch);
             Console.Error.WriteLine("");
@@ -1569,24 +1667,7 @@ After enabling, you may need to:
             Console.Error.WriteLine("   OR use the default editor:");
             Console.Error.WriteLine("      git commit");
             Console.Error.WriteLine("      # The commit message will be pre-filled with merge information");
-            Console.Error.WriteLine("      # An editor will open to let you edit the message");
             Console.Error.WriteLine("");
-            Console.Error.WriteLine("   HOW TO SAVE AND EXIT THE EDITOR:");
-            Console.Error.WriteLine("      If Vim opens:");
-            Console.Error.WriteLine("        • Type ':wq' and press Enter (writes and quits)");
-            Console.Error.WriteLine("        • Or type ':x' and press Enter (save and exit - shorter)");
-            Console.Error.WriteLine("        • To add notes: press 'i' to edit, then Esc, then ':wq'");
-            Console.Error.WriteLine("        • To abort without saving: type ':q!' and press Enter");
-            Console.Error.WriteLine("      If Nano opens:");
-            Console.Error.WriteLine("        • Edit the message as needed");
-            Console.Error.WriteLine("        • Press 'Ctrl+O' to write (save), then Enter to confirm");
-            Console.Error.WriteLine("        • Press 'Ctrl+X' to exit");
-            Console.Error.WriteLine("      If VS Code or Notepad opens:");
-            Console.Error.WriteLine("        • Edit the message as needed");
-            Console.Error.WriteLine("        • Save the file (Ctrl+S or File → Save)");
-            Console.Error.WriteLine("        • Close the editor window");
-            Console.Error.WriteLine("");
-
             Console.Error.WriteLine("STEP 6: Resume the Sync");
             Console.Error.WriteLine("   After committing, run the sync command again:");
             Console.Error.WriteLine($"   cd \"{Path.GetDirectoryName(conflict.RepoPath)}\"");
