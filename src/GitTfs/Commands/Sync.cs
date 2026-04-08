@@ -1005,19 +1005,25 @@ After enabling, you may need to:
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    RedirectStandardInput = true,
                     CreateNoWindow = true
                 };
-                
+
+                // Prevent credential prompts that would hang in CI/automated environments
+                startInfo.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";
+                startInfo.EnvironmentVariables["GCM_INTERACTIVE"] = "never";
+
                 // If auth token is provided and useAuth is true, add authentication
                 if (useAuth && !string.IsNullOrEmpty(_options.GitAuthToken))
                 {
                     // Determine auth type based on token format or remote URL
                     var isGitHub = IsGitHubRemote();
-                    
+
                     if (isGitHub)
                     {
                         // GitHub PAT: Use HTTP Basic Authentication with token as password
                         // Format: base64(username:password) where username can be anything and password is the PAT
+                        // Works for Classic PATs, Fine-Grained PATs, and GitHub Enterprise (EMU) tokens
                         var credentials = Convert.ToBase64String(
                             System.Text.Encoding.ASCII.GetBytes($"x-access-token:{_options.GitAuthToken}")
                         );
@@ -1029,21 +1035,36 @@ After enabling, you may need to:
                         startInfo.Arguments = $"-c http.extraheader=\"AUTHORIZATION: Bearer {_options.GitAuthToken}\" {arguments}";
                     }
                 }
-                
+
                 using (var process = Process.Start(startInfo))
                 {
-                    // Read stdout and stderr to capture Git's output
+                    // Close stdin immediately to prevent any prompt from blocking
+                    process.StandardInput.Close();
+
+                    // Read stderr asynchronously to avoid deadlock.
+                    // A deadlock can occur when both stdout and stderr buffers fill:
+                    // the child blocks writing to one stream while we block reading the other.
+                    string stderr = null;
+                    process.ErrorDataReceived += (sender, e) =>
+                    {
+                        if (e.Data != null)
+                        {
+                            stderr = (stderr == null) ? e.Data : stderr + System.Environment.NewLine + e.Data;
+                        }
+                    };
+                    process.BeginErrorReadLine();
+
+                    // Read stdout synchronously (safe now that stderr is async)
                     var stdout = process.StandardOutput.ReadToEnd();
-                    var stderr = process.StandardError.ReadToEnd();
-                    
+
                     process.WaitForExit();
-                    
+
                     // Display stdout if not empty
                     if (!string.IsNullOrWhiteSpace(stdout))
                     {
                         Console.WriteLine(stdout);
                     }
-                    
+
                     // Display stderr if not empty (Git often writes normal output to stderr)
                     if (!string.IsNullOrWhiteSpace(stderr))
                     {
@@ -1057,7 +1078,7 @@ After enabling, you may need to:
                             Console.WriteLine(stderr);
                         }
                     }
-                    
+
                     return process.ExitCode;
                 }
             }
@@ -1069,7 +1090,8 @@ After enabling, you may need to:
         }
 
         /// <summary>
-        /// Determines if the current Git remote is GitHub
+        /// Determines if the current Git remote is GitHub (including GitHub Enterprise Cloud/EMU).
+        /// Recognizes github.com, *.ghe.com (EMU), and *.ghecloud.com domains.
         /// </summary>
         private bool IsGitHubRemote()
         {
@@ -1082,16 +1104,33 @@ After enabling, you may need to:
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    RedirectStandardInput = true,
                     CreateNoWindow = true
                 };
 
+                // Prevent credential prompts that would hang in CI
+                startInfo.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";
+                startInfo.EnvironmentVariables["GCM_INTERACTIVE"] = "never";
+
                 using (var process = Process.Start(startInfo))
                 {
+                    process.StandardInput.Close();
                     var output = process.StandardOutput.ReadToEnd();
                     process.WaitForExit();
-                    
-                    // Check if the remote URL contains github.com
-                    return output.IndexOf("github.com", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    // Check for GitHub.com
+                    if (output.IndexOf("github.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+
+                    // Check for GitHub Enterprise Cloud (EMU) domains: *.ghe.com
+                    if (output.IndexOf(".ghe.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+
+                    // Check for GitHub Enterprise Cloud alternate domain: *.ghecloud.com
+                    if (output.IndexOf(".ghecloud.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+
+                    return false;
                 }
             }
             catch
