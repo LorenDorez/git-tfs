@@ -961,9 +961,14 @@ namespace GitTfs.VsCommon
 
         public Changeset GetLatestChangeset(IGitTfsRemote remote, bool includeChanges)
         {
-            var history = VersionControl.QueryHistory(remote.TfsRepositoryPath, VersionSpec.Latest, 0,
+            // Wrap with Retry.Do to handle transient TFS auth failures (TF30063).
+            // The QueryHistory call here uses a different TFS API endpoint than the changeset
+            // fetch in GetChangesets (which is already wrapped with Retry.Do). This endpoint
+            // can fail transiently with TF30063 under TFS server load, particularly right after
+            // a changeset fetch. Use 10s interval × 3 retries to allow TFS ~20s recovery time.
+            var history = Retry.Do(() => VersionControl.QueryHistory(remote.TfsRepositoryPath, VersionSpec.Latest, 0,
                                                       RecursionType.Full, null, null, VersionSpec.Latest, 1, includeChanges, false,
-                                                      false).Cast<Changeset>().ToList();
+                                                      false).Cast<Changeset>().ToList(), TimeSpan.FromSeconds(10), 3);
 
             if (history.Empty())
                 throw new GitTfsException("error: remote TFS repository path was not found");
