@@ -152,7 +152,7 @@ namespace GitTfs.VsCommon
 
         private TswaClientHyperlinkService _hyperLinkService;
 
-        private TswaClientHyperlinkService HyperlinkService => _hyperLinkService ?? (_hyperLinkService = GetService<TswaClientHyperlinkService>());
+        private TswaClientHyperlinkService HyperlinkService => _hyperLinkService ?? (_hyperLinkService = Retry.Do(() => GetService<TswaClientHyperlinkService>(), TimeSpan.FromSeconds(10), 3));
 
         public int BatchCount => properties.BatchSize;
 
