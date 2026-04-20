@@ -391,61 +391,11 @@ After enabling, you may need to:
                 return GitTfsExitCodes.OK;
             }
 
-            // Step 1: Fetch from TFVC with retry on auth failure
+            // Step 1: Fetch from TFVC
+            // Note: Transient TFS errors (e.g., TF30063) are handled by Retry.Do in TfsHelper
             Console.WriteLine("\n📥 Step 1: Fetching from TFVC...");
-            
-            // Retry fetch up to 3 times if authentication fails
-            int maxRetries = 3;
-            int retryCount = 0;
-            int fetchResult = GitTfsExitCodes.ExceptionThrown;
-            
-            while (retryCount < maxRetries)
-            {
-                try
-                {
-                    fetchResult = _fetch.Run(_globals.RemoteId);
-                    if (fetchResult == GitTfsExitCodes.OK)
-                    {
-                        break; // Success, exit retry loop
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Check if this is a TFS authentication error
-                    if (ex.Message.Contains("TF30063") || ex.Message.Contains("not authorized"))
-                    {
-                        retryCount++;
-                        if (retryCount < maxRetries)
-                        {
-                            Console.WriteLine($"⚠️  TFS authentication failed (attempt {retryCount}/{maxRetries})");
-                            Console.WriteLine("   Waiting 5 seconds before retry...");
-                            System.Threading.Thread.Sleep(5000);
-                            
-                            // Force TFS connection refresh by recreating the remote
-                            Trace.WriteLine("Refreshing TFS connection...");
-                            remote = _globals.Repository.ReadTfsRemote(_globals.RemoteId);
-                            if (remote == null)
-                            {
-                                throw new GitTfsException("Failed to refresh TFS remote connection");
-                            }
-                            
-                            Console.WriteLine("   Retrying fetch...");
-                            continue;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine("❌ TFS authentication failed after all retries");
-                            throw;
-                        }
-                    }
-                    else
-                    {
-                        // Not an auth error, re-throw immediately
-                        throw;
-                    }
-                }
-            }
-            
+            var fetchResult = _fetch.Run(_globals.RemoteId);
+
             if (fetchResult != GitTfsExitCodes.OK)
             {
                 Console.Error.WriteLine("❌ Fetch from TFVC failed");
