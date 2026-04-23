@@ -529,13 +529,25 @@ namespace GitTfs.VsCommon
             var tfsChangesetInfo = new TfsChangesetInfo { ChangesetId = changeset.ChangesetId, Remote = remote };
             ITfsChangeset tfsChangeset = new TfsChangeset(this, _bridge.Wrap<WrapperForChangeset, Changeset>(changeset), tfsChangesetInfo, _authorsFile);
 
-            tfsChangeset.Summary.Workitems = changeset.AssociatedWorkItems.Select(wi => new TfsWorkitem
+            tfsChangeset.Summary.Workitems = (changeset.AssociatedWorkItems ?? Array.Empty<AssociatedWorkItemInfo>()).Select(wi =>
             {
-                Id = wi.Id,
-                Title = wi.Title,
-                Url = HyperlinkService.GetWorkItemEditorUrl(wi.Id).ToString()
+                string url = null;
+                try
+                {
+                    url = HyperlinkService?.GetWorkItemEditorUrl(wi.Id)?.ToString();
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"Warning: Could not get hyperlink for work item {wi.Id}: {ex.Message}");
+                }
+                return new TfsWorkitem
+                {
+                    Id = wi.Id,
+                    Title = wi.Title,
+                    Url = url ?? string.Empty
+                };
             });
-            tfsChangeset.Summary.CheckinNotes = changeset.CheckinNote.Values.Select(note => new TfsCheckinNote
+            tfsChangeset.Summary.CheckinNotes = (changeset.CheckinNote?.Values ?? Array.Empty<CheckinNoteFieldValue>()).Select(note => new TfsCheckinNote
             {
                 Name = note.Name,
                 Value = note.Value
